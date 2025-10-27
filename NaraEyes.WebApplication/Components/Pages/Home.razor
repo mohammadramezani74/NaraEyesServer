@@ -1,0 +1,345 @@
+﻿@page "/dashboard"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Models.Devices
+@using NaraEyes.Application.Contracts.Models.Metrics
+@using System.Globalization
+@attribute [Authorize]
+@implements IDisposable
+@inject IDeviceService service
+@rendermode InteractiveServer
+
+@inject AuthenticationStateProvider Auth
+
+<MudContainer MaxWidth="MaxWidth.False" Class="p-6">
+
+    <!-- Header -->
+    <MudPaper Class="p-4 rounded-2xl d-flex justify-space-between align-center">
+        <div>
+            <MudText Typo="Typo.h5">سلام، @userName 👋</MudText>
+            <MudText Typo="Typo.subtitle2" Class="text-secondary">  به پنل مانیتورینگ دستگاه‌ها خوش آمدید</MudText>
+        </div>
+        <div class="text-right">
+            <MudText Typo="Typo.h4">@now.ToString("HH:mm:ss")</MudText>
+            <MudText Typo="Typo.caption">@now.ToString("dddd dd MMMM 'ماه' yyyy", @FaCulture)</MudText>
+        </div>
+    </MudPaper>
+
+    <!-- KPI Cards -->
+    <MudStack Row="true" Wrap="Wrap.NoWrap" Class="stats-wrap mt-4" AlignItems="AlignItems.Stretch" Justify="Justify.SpaceBetween">
+        <div class="stat-card">
+            <MudPaper Class="stat-paper">
+                <MudText Color="Color.Primary" Typo="Typo.overline">InService</MudText>
+                <MudText Typo="Typo.h4">@inServiceCount</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">دستگاه‌های آماده‌به‌کار</MudText>
+            </MudPaper>
+        </div>
+
+        <div class="stat-card">
+            <MudPaper Class="stat-paper">
+                <MudText Color="Color.Tertiary" Typo="Typo.overline">Online</MudText>
+                <MudText Typo="Typo.h4">@OnlineCount</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">دستگاه‌های آنلاین</MudText>
+            </MudPaper>
+        </div>
+
+        <div class="stat-card">
+            <MudPaper Class="stat-paper">
+                <MudText Typo="Typo.overline" Class="text-warning">Warning</MudText>
+                <MudText Typo="Typo.h4">@warningCount</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">نیازمند بررسی</MudText>
+            </MudPaper>
+        </div>
+
+        <div class="stat-card">
+            <MudPaper Class="stat-paper">
+                <MudText Typo="Typo.overline" Class="text-error">Error</MudText>
+                <MudText Typo="Typo.h4">@errorCount</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">دارای خطا</MudText>
+            </MudPaper>
+        </div>
+
+        <div class="stat-card">
+            <MudPaper Class="stat-paper">
+                <MudText Typo="Typo.overline">Offline</MudText>
+                <MudText Typo="Typo.h4">@offlineCount</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">قطع از سرویس</MudText>
+            </MudPaper>
+        </div>
+    </MudStack>
+
+    <!-- Charts -->
+    <MudGrid Class="mt-4" GutterSize="GutterSize.Small">
+
+        <!-- Donut: توزیع وضعیت دستگاه‌ها -->
+        <MudItem xs="12" md="4">
+            <MudPaper Class="p-4 rounded-2xl" Style="height:541px">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">توزیع وضعیت دستگاه‌ها (اکنون)</MudText>
+
+                <MudChart ChartType="ChartType.Donut"
+                          InputLabels="@statusLabels"
+                          InputData="@statusData"
+                          Style="height:300px" />
+            </MudPaper>
+        </MudItem>
+
+    <MudItem xs="12" md="8">
+    <MudPaper Class="p-4 rounded-2xl">
+        <div class="d-flex justify-space-between align-center mb-2">
+            <MudText Typo="Typo.subtitle1">Top 10 شعبه با بیشترین خطا</MudText>
+            <MudText Typo="Typo.caption" Class="text-secondary">براساس آخرین وضعیت ماژول‌ها</MudText>
+        </div>
+
+        <MudChart ChartType="ChartType.Bar"
+                  XAxisLabels="@_branchErrorLabels"
+                  ChartSeries="@_branchErrorSeries"
+                  ChartOptions="@_branchErrorOptions"
+                  Style="height:320px" />
+
+        <MudDivider Class="my-3" />
+
+        <!-- جدول جمع‌وجور برای دریل‌داون -->
+        <MudTable Items="@_branchTop" Dense="true" Hover="true" Bordered="false" Elevation="0"
+                  RowStyle="cursor:pointer"
+                > 
+            <HeaderContent>
+                <MudTh Class="text-center">#</MudTh>
+                <MudTh>شعبه</MudTh>
+                <MudTh Class="text-center">ماژول‌های خطادار</MudTh>
+                <MudTh Class="text-center">دستگاه‌های درگیر</MudTh>
+                <MudTh></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd Class="text-center">@(@contextRank(@context))</MudTd>
+                <MudTd>@context.BranchName</MudTd>
+                <MudTd Class="text-center">
+                    <MudChip T="String" Color="Color.Error" Variant="Variant.Filled" Size="Size.Small">
+                        @context.ErrorModules
+                    </MudChip>
+                </MudTd>
+                <MudTd Class="text-center">
+                            <MudChip T="String" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small">
+                        @context.AffectedDevices
+                    </MudChip>
+                </MudTd>
+                <MudTd Class="text-right">
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Color="Color.Primary" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="text-secondary p-4">داده‌ای برای نمایش وجود ندارد.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+</MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Class="p-4 rounded-2xl">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">نمای کلی</MudText>
+
+                <MudChart ChartType="ChartType.StackedBar"
+                          ChartSeries="@overviewSeries"
+                          XAxisLabels="@overviewLabels"
+                          ChartOptions="@barOptions"
+                          Style="height:380px" />
+                @* هر ستون یک سری جدا تا رنگ‌ها مستقل باشند *@
+            </MudPaper>
+        </MudItem>
+
+    </MudGrid>
+</MudContainer>
+@code{
+    private List<BranchErrorAggDto> _branchTop = new();
+    private string[] _branchErrorLabels = Array.Empty<string>();
+    private List<ChartSeries> _branchErrorSeries = new();
+    private static readonly CultureInfo FaCulture = CreateFaCulture();
+
+private static CultureInfo CreateFaCulture()
+{
+    var fa = new CultureInfo("fa-IR");
+    fa.DateTimeFormat.Calendar = new PersianCalendar();
+    return fa;
+}
+    private ChartOptions _branchErrorOptions = new()
+    {
+        ChartPalette = new[] { "#E53935", "#FB8C00" } // قرمز برای خطا، نارنجی برای دستگاه‌های درگیر
+    };
+    private int @contextRank(BranchErrorAggDto row)
+    {
+        var idx = _branchTop.IndexOf(row);
+        return idx >= 0 ? idx + 1 : 0;
+    }
+
+    // ناوبری به صفحهٔ جزئیات شعبه (مسیرت را تنظیم کن)
+    private void GoToBranchDetails(BranchErrorAggDto row)
+    {
+   
+    }
+
+    private async Task LoadTopBranchesChartAsync(CancellationToken ct = default)
+    {
+        // صدا زدن متد EFCore که ساختی
+        _branchTop = await service.GetTop10BranchesByErrorsAsync(ct);
+        // برچسب‌ها (نام شعب) — نزولی بر اساس ErrorModules
+        var ordered = _branchTop
+            .OrderByDescending(x => x.ErrorModules)
+            .ThenByDescending(x => x.AffectedDevices)
+            .ToList();
+
+        _branchErrorLabels = ordered.Select(x => x.BranchName).ToArray();
+
+        // دو سری: خطا و دستگاه‌های درگیر (کنار هم)
+        _branchErrorSeries = new()
+    {
+        new ChartSeries
+        {
+            Name = "ماژول‌های خطادار",
+            Data = ordered.Select(x => (double)x.ErrorModules).ToArray()
+        },
+        new ChartSeries
+        {
+            Name = "دستگاه‌های درگیر",
+            Data = ordered.Select(x => (double)x.AffectedDevices).ToArray()
+        }
+    };
+    }
+}
+@code {
+    private HomeChartsViewModel homeChartsViewModel = new();
+    private string userName = "کاربر";
+    private DateTime now = DateTime.Now;
+    private System.Timers.Timer? clockTimer;
+
+    // ---- Fake KPI ----
+    private int totalDevices = 950;
+    private int inServiceCount;
+    private int OnlineCount;
+    private int warningCount;
+    private int errorCount;
+    private int offlineCount;
+    private int totalBranches;
+    private int totalSupervision;
+    private int totalUsers;
+
+    // ---- Donut (Pie/Donut = Input*) ----
+    private string[] statusLabels = new[] { "InService","Online", "Warning",  "Offline","Error", };
+    private double[] statusData = Array.Empty<double>();
+
+    // ---- Line (Line/Bar = ChartSeries + XAxisLabels) ----
+    private string[] dayLabels = Array.Empty<string>();   // برچسب 10 روز اخیر
+    private List<ChartSeries> trendSeries = new();        // [0]=InService (% آبی), [1]=Errors (% قرمز)
+    private ChartOptions trendOptions = new()
+    {
+        ChartPalette = new[] { "#1976D2", "#E53935" }     // آبی، قرمز
+    };
+
+    // ---- Bar Overview (۳ ستون رنگ‌متفاوت) ----
+    private string[] overviewLabels = Array.Empty<string>();  // ["کل دستگاه‌ها","تعداد شعب","تعداد کاربران"]
+    private List<ChartSeries> overviewSeries = new();         // هر ستون = یک سری
+    private ChartOptions barOptions = new()
+    {
+        ChartPalette = new[] { "#64B5F6", "#34D399", "#8B5CF6", "#FBBF24" }, // آبی، سبز، قرمز
+
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userName = state.User?.Identity?.Name ?? "کاربر";
+        var data = await service.GetVisualizeHome(userName);
+        if (data != null)
+        {
+            totalDevices = data.TotalDevice;
+            inServiceCount = data.InServiceCount;
+            errorCount = data.errorCount;
+            offlineCount = data.offlineCount;
+            warningCount = data.warningCount;
+            totalBranches = data.BranchCount;
+            totalSupervision = data.Supervisions;
+            OnlineCount = data.OnlineCount;
+            userName = data.Name;
+            totalUsers = data.TotalUsers;
+        }
+        await LoadTopBranchesChartAsync();
+        GenerateFakeKpis();
+        GenerateOverviewBar();     
+        GenerateFakeDailySeries(); 
+
+        // ساعت زنده
+        clockTimer = new System.Timers.Timer(1000);
+        clockTimer.Elapsed += (_, __) =>
+        {
+            now = DateTime.Now;
+            InvokeAsync(StateHasChanged);
+        };
+        clockTimer.Start();
+    }
+
+    private void GenerateFakeKpis()
+    {
+
+        statusData = new double[] { inServiceCount, OnlineCount, warningCount, offlineCount, errorCount };
+    }
+
+
+    private void GenerateFakeDailySeries()
+    {
+        var rnd = new Random();
+
+        var labels = new List<string>();
+        var inServiceP = new List<double>(); // درصد
+        var errorsP = new List<double>(); // درصد
+
+        for (int i = 9; i >= 0; i--)
+        {
+            var d = DateTime.Today.AddDays(-i);
+            labels.Add(d.ToString("yyyy/MM/dd"));
+
+            // 0..2π
+            var t = (9 - i) / 9.0 * Math.PI * 2;
+
+
+            var inSvc = 60 + 22 * Math.Sin(t) + rnd.Next(-12, 13);
+            var err = 60 + 22 * Math.Sin(t + Math.PI * 0.65) + rnd.Next(-12, 13);
+
+            inSvc = Math.Clamp(inSvc, 5, 95);
+            err = Math.Clamp(err, 5, 95);
+
+            inServiceP.Add(Math.Round(inSvc, 1));
+            errorsP.Add(Math.Round(err, 1));
+        }
+
+        dayLabels = labels.ToArray();
+        trendSeries = new()
+        {
+            new ChartSeries { Name = "InService (%)", Data = inServiceP.ToArray() },
+            new ChartSeries { Name = "Errors (%)",    Data = errorsP.ToArray() }
+        };
+    }
+
+    // --- نمودار میله‌ای نمای کلی (۳ ستون با رنگ‌های متفاوت و پهن) ---
+    private void GenerateOverviewBar()
+    {
+        overviewLabels = new[] { "کل دستگاه‌ها", "تعداد شعب", "سرپرستی ها","کاربران" };
+
+        // اعداد فیک
+
+
+        // هر ستون = یک سری جدا (برای رنگ متفاوت)
+        overviewSeries = new()
+        {
+            new ChartSeries { Name = "کل دستگاه‌ها",  Data = new double[] { totalDevices,   0,             0 , 0} },
+            new ChartSeries { Name = "تعداد شعب",     Data = new double[] { 0,              totalBranches, 0 ,0} },
+            new ChartSeries { Name = "تعداد سرپرستی ها", Data = new double[] { 0,              0,             totalSupervision,0 } },
+          new ChartSeries { Name = "تعداد کاربران ", Data = new double[] { 0,              0,             0,totalUsers } }
+        };
+    }
+
+    public void Dispose()
+    {
+        clockTimer?.Stop();
+        clockTimer?.Dispose();
+    }
+}

@@ -1,0 +1,35 @@
+﻿@using MudBlazor
+@using System.ComponentModel.DataAnnotations
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="@this" OnValidSubmit="Submit">
+            <DataAnnotationsValidator />
+            <MudTextField @bind-Value="Name" Label="نام نقش" Required="true" Immediate="true" />
+            <ValidationSummary class="text-error mt-2" />
+        </EditForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit">افزودن</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Required(ErrorMessage = "نام نقش الزامی است")]
+    public string Name { get; set; } = "";
+
+    private void Cancel() => MudDialog.Cancel();
+    private void Submit()
+    {
+        if (string.IsNullOrWhiteSpace(Name))
+        {
+            Snackbar.Add("نام نقش را وارد کنید.", Severity.Warning);
+            return;
+        }
+        MudDialog.Close(DialogResult.Ok(Name.Trim()));
+    }
+}

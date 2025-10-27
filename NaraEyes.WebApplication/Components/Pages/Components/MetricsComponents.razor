@@ -1,0 +1,279 @@
+﻿@using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Models.Metrics
+@inject NavigationManager Nav
+@inject IDeviceService _service
+<div class="d-flex justify-space-between align-center mb-4">
+    <div class="d-flex align-center">
+        <MudIcon Icon="@Icons.Material.Filled.Devices" Size="Size.Large" Class="me-2" />
+        <div>
+            <MudText Typo="Typo.h5" Class="fw-bold">جزئیات دستگاه</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">IP: @DeviceIp</MudText>
+        </div>
+    </div>
+    <div class="d-flex" style="gap:.5rem">
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/devices"))">بازگشت</MudButton>
+        <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadFakeData">بارگذاری مجدد</MudButton>
+    </div>
+</div>
+
+<!-- Top slider: کارت‌های خلاصه -->
+<MudCarousel TData="object"
+             Class="mud-width-full pa-0"
+             Style="height:210px;"
+             AutoCycle="true"
+             AutoCycleTime="@(TimeSpan.FromSeconds(6))"
+             ShowArrows="true"
+             ShowBullets="true">
+
+    <ChildContent>
+        <MudCarouselItem>
+            <!-- 👇 رنگ متن را صراحتاً روی رنگ متن استاندارد تم می‌گذاریم -->
+            <div class="pa-4" style="height:100%; color: var(--mud-palette-text-primary);">
+                <div class="mini-wrap">
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">نام دستگاه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.DisplayName</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">شعبه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.Branch</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Numbers" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">تاریخ نصب دستگاه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">1400/12/03</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.NetworkPing" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">ورژن ایجنت</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.AgentVersion</MudText>
+                    </MudPaper>
+                </div>
+            </div>
+        </MudCarouselItem>
+
+        <MudCarouselItem>
+            <div class="pa-4" style="height:100%; color: var(--mud-palette-text-primary);">
+                <div class="mini-wrap">
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">اپراتور</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">محمد سلیمی (09123456576)</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">آخرین مشاهده</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.LastHeartBeat</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">سریال دستگاه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@($"Y560040012004")</MudText>
+                    </MudPaper>
+
+                    <MudPaper Class="mini" Elevation="1">
+                        <MudIcon Icon="@Icons.Material.Filled.DeveloperBoard" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">مدل دستگاه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">هیوسانگ</MudText>
+                    </MudPaper>
+                </div>
+            </div>
+        </MudCarouselItem>
+    </ChildContent>
+</MudCarousel>
+
+
+
+
+<!-- مشخصات + گیج + نمودار مصرف -->
+<MudGrid Class="mb-4">
+    <MudItem xs="12" md="4">
+        <MudCard Class="rounded-2xl h-100">
+            <MudCardHeader>
+                <MudText Typo="Typo.subtitle1" Class="fw-bold">مشخصات دستگاه</MudText>
+            </MudCardHeader>
+            <MudCardContent>
+                <div class="d-flex flex-column" style="gap:.75rem">
+
+                    <div class="px-3 py-2 rounded-lg mud-elevation-1">
+                        <div class="d-flex align-center justify-space-between">
+                            <div class="d-flex align-center" style="gap:.5rem">
+                                <MudIcon Icon="@Icons.Material.Filled.NetworkWifi" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">IP</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@DeviceIp</MudText>
+                        </div>
+                    </div>
+
+                    <div class="px-3 py-2 rounded-lg mud-elevation-1">
+                        <div class="d-flex align-center justify-space-between">
+                            <div class="d-flex align-center" style="gap:.5rem">
+                                <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">RAM</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@_device.TotalRam GB</MudText>
+                        </div>
+                    </div>
+
+                    <div class="px-3 py-2 rounded-lg mud-elevation-1">
+                        <div class="d-flex align-center justify-space-between">
+                            <div class="d-flex align-center" style="gap:.5rem">
+                                <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">مدل CPU</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@_device.CpuModel</MudText>
+                        </div>
+                    </div>
+
+                    <div class="px-3 py-2 rounded-lg mud-elevation-1">
+                        <div class="d-flex align-center justify-space-between">
+                            <div class="d-flex align-center" style="gap:.5rem">
+                                <MudIcon Icon="@Icons.Material.Filled.NetworkPing" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">Latency</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@($"{23} ms")</MudText>
+                        </div>
+                    </div>
+
+                </div>
+            </MudCardContent>
+         
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        <MudCard Class="rounded-2xl h-100">
+            <MudCardHeader>
+                <MudText Typo="Typo.subtitle1" Class="fw-bold">مصرف فعلی</MudText>
+            </MudCardHeader>
+
+            <MudCardContent>
+
+                <!-- سه گیج دایره‌ای: CPU / RAM / Disk -->
+                <div class="gauge-wrap mb-3">
+
+                    <MudPaper Class="gauge-card">
+                        <div class="gauge-ring">
+                            <MudProgressCircular Size="Size.Large" Value="@_cpuUsed" Max="100" Thickness="4" />
+                            <span class="gauge-value">@($"{_cpuUsed}%")</span>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Class="fw-bold k-label">CPU</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Used / Free</MudText>
+                            <MudProgressLinear Value="@_cpuUsed" Max="100" Class="mt-1" Rounded="true" />
+                        </div>
+                    </MudPaper>
+
+                    <MudPaper Class="gauge-card">
+                        <div class="gauge-ring">
+                            <MudProgressCircular Color="Color.Info" Size="Size.Large" Value="@_ramUsed" Max="100" Thickness="4" />
+                            <span class="gauge-value">@($"{_ramUsed}%")</span>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Class="fw-bold k-label">RAM</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Used / Free</MudText>
+                            <MudProgressLinear Color="Color.Info" Value="@_ramUsed" Max="100" Class="mt-1" Rounded="true" />
+                        </div>
+                    </MudPaper>
+
+                    <MudPaper Class="gauge-card">
+                        <div class="gauge-ring">
+                            <MudProgressCircular Color="Color.Success" Size="Size.Large" Value="@_diskUsed" Max="100" Thickness="4" />
+                            <span class="gauge-value">@($"{_diskUsed}%")</span>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Class="fw-bold k-label">Disk</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Used / Free</MudText>
+                            <MudProgressLinear Color="Color.Success" Value="@_diskUsed" Max="100" Class="mt-1" Rounded="true" />
+                        </div>
+                    </MudPaper>
+
+                </div>
+
+                <!-- StackedBar مینیمال: Used/Free برای CPU/RAM/Disk -->
+                <MudChart ChartType="ChartType.StackedBar"
+                          ChartSeries="@_stackedSeries"
+                          XAxisLabels="@_metricLabels"
+                          AxisChartOptions="@_axisOptions"
+                          ChartOptions="@_chartOptions"
+                          LegendPosition="Position.Bottom"
+                          Width="100%"
+                          Height="320px" />
+            </MudCardContent>
+
+            <MudCardActions Class="px-3 pb-3">
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadFakeData">بروزرسانی نمودار</MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public string? DeviceIp { get; set; }
+    public DeviceMetricsViewModel _device { get; set; } = new();
+    private readonly string[] _metricLabels = new[] { "CPU", "RAM", "Disk" };
+    private List<ChartSeries> _stackedSeries = new();
+    private double _cpuUsed, _ramUsed, _diskUsed;
+    private AxisChartOptions _axisOptions = new()
+    {
+        MatchBoundsToSize = true,
+        StackedBarWidthRatio = 0.6,
+        XAxisLabelRotation = 0
+    };
+    protected async override Task OnInitializedAsync()
+    {
+        _device = await _service.GetMetricsAsync(DeviceIp);
+        _cpuUsed = _device.CpuUsage.usage;
+        _ramUsed = _device.RamUsage.usage;
+        _diskUsed = _device.DiskUsage.usage;
+        var used = new double[] { _device.CpuUsage.usage, _device.RamUsage.usage, _device.DiskUsage.usage };
+        var free = new double[] { _device.CpuUsage.free, _device.RamUsage.free, _device.DiskUsage.free };
+
+        _stackedSeries = new ()
+                {
+                    new ChartSeries { Name = "Used %", Data = used
+        },
+                    new ChartSeries { Name = "Free %", Data = free }
+                };
+    }
+    private ChartOptions _chartOptions = new()
+    {
+        ChartPalette = new[] { "#1976D2", "#9E9E9E" } // Used / Free
+    };
+    public async Task ReloadFakeData()
+    {
+        var result=  await _service.RequestGetMetricsAsync(DeviceIp);
+        if (result != null)
+        {
+            _cpuUsed = result.CpuUsage.usage;
+            _ramUsed = result.RamUsage.usage;
+            _diskUsed = result.DiskUsage.usage;
+            _device.CpuUsage.usage = result.CpuUsage.usage;
+            _device.RamUsage.usage = result.RamUsage.usage;
+            _device.DiskUsage.usage = result.DiskUsage.usage;
+
+            var used = new double[] { _device.CpuUsage.usage, _device.RamUsage.usage, _device.DiskUsage.usage };
+            var free = new double[] { _device.CpuUsage.free, _device.RamUsage.free, _device.DiskUsage.free };
+
+            _stackedSeries = new()
+                {
+                    new ChartSeries { Name = "Used %", Data = used
+        },
+                    new ChartSeries { Name = "Free %", Data = free }
+                };
+            StateHasChanged();
+        }
+    }
+    // gauges values
+
+
+
+}

@@ -1,0 +1,170 @@
+﻿@using MudBlazor
+@using System.Net.Http.Json
+@using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Models.Devices
+@using NaraEyes.WebApplication.Components.Dialogs
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IDeviceService DeviceService
+
+<MudPaper Class="p-3 rounded-2xl mt-2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
+        <MudTextField T="string"
+                      @bind-Value="_search"
+                      Placeholder="جستجو دستگاه (کُد/IP/سریال/مدل)..."
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="w-96"
+                      Immediate="true"
+                      DebounceInterval="300"
+                      OnDebouncedValueChanged="(_ => StateHasChanged())" />
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Load">رفرش</MudButton>
+            <!-- اگر ایجاد دستگاه داری، این دکمه را فعال کن -->
+            @* <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddDevice">افزودن</MudButton> *@
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="_devices"
+              Dense="true" Hover="true" Bordered="true"
+              Filter="DeviceFilter" Loading="_loading">
+        <ColGroup>
+            <col style="width: 110px;" />
+            <col style="width: 160px;" />
+            <col style="width: 220px;" />
+            <col />
+            <col style="width: 110px;" />
+        </ColGroup>
+
+        <HeaderContent>
+            <MudTh>کُد</MudTh>
+            <MudTh>IP</MudTh>
+            <MudTh>شماره سریال</MudTh>
+            <MudTh>مدل</MudTh>
+            <MudTh class="text-end">عملیات</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="کُد">@context.Code</MudTd>
+            <MudTd DataLabel="IP">@context.Ip</MudTd>
+            <MudTd DataLabel="سریال">@context.SerialNo</MudTd>
+            <MudTd DataLabel="مدل">@context.Model</MudTd>
+            <MudTd Class="text-end">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => EditDevice(context))" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => DeleteDevice(context))" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="my-3" />
+            }
+            else
+            {
+                <MudText Class="text-secondary">رکوردی یافت نشد.</MudText>
+            }
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private string _search = "";
+    private bool _loading = true;
+    private List<GetDevicesViewModel> _devices = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+            _devices = (await DeviceService.GetDevicesAsync(CancellationToken.None)).ToList();
+        }
+        catch
+        {
+            Snackbar.Add("خطا در دریافت لیست دستگاه‌ها.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool DeviceFilter(GetDevicesViewModel d)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var s = _search.Trim();
+        return (d.Code?.ToString().Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (d.Ip?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (d.SerialNo?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (d.Model?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private async Task EditDevice(GetDevicesViewModel vm)
+    {
+        var upd = new UpdateDeviceViewModel
+        {
+            Id = vm.Id,
+            Code = vm.Code,
+            Ip = vm.Ip,
+            Description = vm.Description,
+            InstallationDate = vm.InstallationDate,   // nullable در مدل Update؛ مقدار فعلی را پاس می‌دهیم
+            Address = vm.Address,
+            AgentVersion = vm.AgentVersion,           // فقط نمایش؛ DeviceDialog آن را ReadOnly نشان می‌دهد
+            BranchId = vm.BranchId,
+            IsActive = vm.IsActive,
+            Latitude = vm.Latitude,
+            Longitude = vm.Longitude,
+            MobileNo = vm.MobileNo,
+            Model = vm.Model,
+            SerialNo = vm.SerialNo,
+            Tel = vm.Tel,
+            newContact = new newcontact(vm.OperatorName, vm.OperatorTel, vm.OperatorphoneNumber, vm.OperatorAddress,vm.OperatorEmail)
+        };
+
+        var parameters = new DialogParameters<DeviceDialog> { { x => x.Model, upd } };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = Dialog.Show<DeviceDialog>($"ویرایش دستگاه «{vm.Ip}»", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool ok && ok)
+        {
+            Snackbar.Add("تغییرات ذخیره شد.", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task DeleteDevice(GetDevicesViewModel vm)
+    {
+        var ok = await Dialog.ShowMessageBox("حذف دستگاه",
+            $"دستگاه با IP «{vm.Ip}» حذف شود؟",
+            yesText: "حذف", cancelText: "انصراف",
+            options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall });
+
+        if (ok is true)
+        {
+            try
+            {
+                await DeviceService.DeactivateAsync(vm.Id, CancellationToken.None);
+                Snackbar.Add("غیرفعال شد.", Severity.Success);
+                await Load();
+            }
+            catch
+            {
+                Snackbar.Add("حذف/غیرفعال‌سازی با خطا مواجه شد.", Severity.Error);
+            }
+        }
+    }
+}

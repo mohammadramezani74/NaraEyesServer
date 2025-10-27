@@ -1,0 +1,64 @@
+﻿<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.h6">انتخاب بازهٔ تاریخ ژورنال</MudText>
+
+            <MudDateRangePicker Label="بازهٔ تاریخ"
+                                @bind-DateRange="_range"
+                                DateFormat="yyyy/MM/dd"
+                                TitleDateFormat="dddd, dd MMMM yyyy"
+                                StartMonth="@DateTime.Now.AddMonths(-1)"
+                                Editable="true"
+                                Clearable="true"
+                               />
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">@_error</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Ok">تأیید</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    private DateRange _range = new(DateTime.Now.Date, DateTime.Now.Date);
+    private string? _error;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Ok()
+    {
+        _error = null;
+
+        // اعتبارسنجی ساده
+        if (_range.Start is null || _range.End is null)
+        {
+            _error = "لطفاً تاریخ شروع و پایان را انتخاب کنید.";
+            return;
+        }
+        if (_range.End < _range.Start)
+        {
+            _error = "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.";
+            return;
+        }
+        if (_range.Start > DateTime.Now || _range.End > DateTime.Now.AddMinutes(1))
+        {
+            _error = "تاریخ‌های آینده مجاز نیست.";
+            return;
+        }
+ 
+        if ((_range.End.Value - _range.Start.Value).TotalDays > 31)
+        {
+            _error = "حداکثر بازهٔ قابل دانلود ۳۱ روز است.";
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(_range));
+    }
+}

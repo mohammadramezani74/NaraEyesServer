@@ -1,0 +1,36 @@
+﻿/* یک ردیف افقی تمیز و اسکرول‌پذیر در عرض‌های کم */
+.stats-wrap {
+    gap: 12px;
+    overflow-x: auto; /* اگر جا کم شد، اسکرول افقی */
+    padding-bottom: 4px; /* سایه از زیر بریده نشود */
+}
+
+/* هر کارت با حداقل عرض معقول تا نشکند */
+.stat-card {
+    flex: 1 1 0;
+    min-width: 220px; /* اگر صفحه خیلی باریک شد، اسکرول فعال می‌شود */
+}
+
+/* ظاهر کارت‌ها */
+.stat-paper {
+    padding: 16px;
+    border-radius: 16px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+
+    /* افکت لطیف هاور برای زیبایی */
+    .stat-paper:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0,0,0,.08);
+    }
+
+/* اگر صفحه خیلی بزرگ بود، اجازه بده کارت‌ها کمی جمع‌وجورتر شوند */
+@media (min-width: 1400px) {
+    .stat-card {
+        min-width: 0;
+    }
+}

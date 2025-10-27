@@ -1,0 +1,101 @@
+﻿@using MudBlazor
+@using System.ComponentModel.DataAnnotations
+@using NaraEyes.Application.Contracts.Interfaces.Identity
+@using NaraEyes.Application.Contracts.Models.Identity
+@inject IUserService UserService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="@_vm" OnValidSubmit="OnSubmit">
+            <DataAnnotationsValidator />
+
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField @bind-Value="_vm.Name" Label="نام" Required="true" Class="w-full" />
+                    <MudTextField @bind-Value="_vm.LName" Label="نام خانوادگی" Required="true" Class="w-full" />
+                </MudStack>
+
+                <MudTextField @bind-Value="_vm.UserName" Label="نام کاربری" Required="true" />
+
+                <MudTextField @bind-Value="_vm.PhoneNumber" Label="موبایل" />
+
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField @bind-Value="_vm.Password"
+                                  Label="رمز عبور"
+                                  InputType="@(_showPass? InputType.Text: InputType.Password)"
+                                  Required="true"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_showPass? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="@TogglePass"
+                                  Immediate="true"
+                                  Class="w-full" />
+
+                    <MudTextField @bind-Value="_vm.ConfirmPassword"
+                                  Label="تأیید رمز عبور"
+                                  InputType="@(_showConfirm? InputType.Text: InputType.Password)"
+                                  Required="true"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_showConfirm? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="@ToggleConfirm"
+                                  Immediate="true"
+                                  Class="w-full" />
+                </MudStack>
+
+                <ValidationSummary />
+            </MudStack>
+        </EditForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit" Disabled="@_busy">
+            @if (_busy)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mx-2" />
+            }
+            ایجاد
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private CreateUserModel _vm = new();
+    private bool _busy;
+    private bool _showPass, _showConfirm;
+
+    private void TogglePass() => _showPass = !_showPass;
+    private void ToggleConfirm() => _showConfirm = !_showConfirm;
+
+    private void Cancel() => MudDialog.Cancel();
+    private async Task Submit() => await OnSubmit();
+
+    private async Task OnSubmit()
+    {
+        if (_busy) return;
+        _busy = true;
+
+        try
+        {
+            var res = await UserService.CreateUserAsync(_vm, CancellationToken.None);
+            if (res.IsSucceded)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add(res.Message ?? "ایجاد کاربر ناموفق.", Severity.Warning);
+            }
+        }
+        catch
+        {
+            Snackbar.Add("خطای غیرمنتظره‌ای رخ داد.", Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

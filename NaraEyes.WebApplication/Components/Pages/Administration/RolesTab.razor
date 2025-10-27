@@ -1,0 +1,214 @@
+﻿@using MudBlazor
+@using NaraEyes.Application.Abstraction.Identity
+@using NaraEyes.Application.Contracts.Models.Identity
+@using NaraEyes.WebApplication.Components.Dialogs
+@inject IApplicationRoleManager RoleManager
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<MudPaper Class="p-3 rounded-2xl mt-2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
+        <MudTextField T="string"
+                      @bind-Value="_search"
+                      Placeholder="جستجو نقش..."
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="w-64"
+                      Immediate="true"
+                      DebounceInterval="350"
+                      OnDebouncedValueChanged="(_ => Reload())" />
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Reload">رفرش</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddRole">افزودن</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="_roles"
+              Filter="RoleFilter"
+              Dense="true" Hover="true" Bordered="true"
+              CanCancelEdit="true"
+              EditTrigger="TableEditTrigger.EditButton"
+              RowEditPreview="BackupRole"
+              RowEditCancel="CancelRoleEdit"
+              RowEditCommit="CommitRoleEdit"
+              Loading="_loading"
+              @ref="_table">
+
+        <HeaderContent>
+            <MudTh>نام نقش</MudTh>
+            <MudTh class="text-end">عملیات</MudTh>
+        </HeaderContent>
+
+        <!-- نمایش -->
+        <RowTemplate>
+            <MudTd DataLabel="نام نقش">@context.Name</MudTd>
+            <MudTd Class="text-end">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                   Color="Color.Error"
+                                   OnClick="@(() => DeleteRole(context))" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+
+        <!-- ویرایش اینلاین -->
+        <RowEditingTemplate>
+            <MudTd DataLabel="نام نقش">
+                <MudTextField T="string" @bind-Value="context.Name" Required />
+            </MudTd>
+         
+        </RowEditingTemplate>
+
+        <NoRecordsContent>
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="my-3" />
+            }
+            else
+            {
+                <MudText Class="text-secondary">رکوردی یافت نشد.</MudText>
+            }
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private string _search = "";
+    private bool _loading = true;
+    private List<RoleRow> _roles = new();
+    private RoleRow? _backup;
+    private MudTable<RoleRow> _table = default!;
+
+    protected override async Task OnInitializedAsync() => await Reload();
+
+    private async Task Reload()
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+            var list = await RoleManager.GetRoles(_search, CancellationToken.None);
+            _roles = list.Select(x => new RoleRow { Id = x.Id, Name = x.Name }).OrderBy(x => x.Name).ToList();
+        }
+        catch
+        {
+            Snackbar.Add("خطا در دریافت لیست نقش‌ها.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool RoleFilter(RoleRow r)
+        => string.IsNullOrWhiteSpace(_search) || r.Name.Contains(_search, StringComparison.OrdinalIgnoreCase);
+
+    private void BackupRole(object item)
+    {
+        var r = (RoleRow)item;
+        _backup = new RoleRow { Id = r.Id, Name = r.Name };
+    }
+
+    private void CancelRoleEdit(object item)
+    {
+        if (_backup is null) return;
+        var r = (RoleRow)item;
+        r.Name = _backup.Name;
+        Snackbar.Add("ویرایش لغو شد.", Severity.Info);
+    }
+
+    private async void CommitRoleEdit(object item)
+    {
+        var r = (RoleRow)item;
+        try
+        {
+            if (_backup is null || string.Equals(_backup.Name, r.Name, StringComparison.Ordinal))
+            {
+                Snackbar.Add("بدون تغییر.", Severity.Info);
+                return;
+            }
+
+            var res = await RoleManager.UpdateRole(_backup!.Name, r.Name, CancellationToken.None);
+            if (res.IsSucceded)
+                Snackbar.Add("نقش به‌روزرسانی شد.", Severity.Success);
+            else
+            {
+                r.Name = _backup!.Name; // rollback
+                Snackbar.Add(res.Message ?? "به‌روزرسانی ناموفق.", Severity.Warning);
+            }
+        }
+        catch
+        {
+            r.Name = _backup?.Name ?? r.Name; // rollback
+            Snackbar.Add("خطای غیرمنتظره در ذخیره نقش.", Severity.Error);
+        }
+    }
+
+    private async Task AddRole()
+    {
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+        var dialog = Dialog.Show<RoleCreateDialog>("افزودن نقش", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string newName && !string.IsNullOrWhiteSpace(newName))
+        {
+            try
+            {
+                var res = await RoleManager.CreateRole(newName.Trim(), CancellationToken.None);
+                if (res.IsSucceded)
+                {
+                    Snackbar.Add("نقش جدید ایجاد شد.", Severity.Success);
+                    await Reload();
+                }
+                else
+                {
+                    Snackbar.Add(res.Message ?? "ایجاد نقش ناموفق.", Severity.Warning);
+                }
+            }
+            catch
+            {
+                Snackbar.Add("ایجاد نقش با خطا مواجه شد.", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteRole(RoleRow r)
+    {
+        var ok = await Dialog.ShowMessageBox("حذف نقش",
+                $"نقش «{r.Name}» حذف شود؟",
+                yesText: "حذف", cancelText: "انصراف",
+                options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall });
+
+        if (ok is true)
+        {
+            try
+            {
+                var res = await RoleManager.DeleteRole(r.Name, CancellationToken.None);
+                if (res.IsSucceded)
+                {
+                    _roles.Remove(r);
+                    Snackbar.Add("حذف شد.", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add(res.Message ?? "حذف ناموفق.", Severity.Warning);
+                }
+            }
+            catch
+            {
+                Snackbar.Add("حذف نقش با خطا مواجه شد.", Severity.Error);
+            }
+        }
+    }
+
+    private class RoleRow
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+}

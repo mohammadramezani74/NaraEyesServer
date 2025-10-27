@@ -1,0 +1,178 @@
+﻿@using MudBlazor
+@using System.ComponentModel.DataAnnotations
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Models.Basic
+@using static NaraEyes.WebApplication.Components.Pages.Administration.BranchesTab
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IBranchService BranchService
+@inject ISupervisionStateService SupervisionService
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="@_vm" OnValidSubmit="OnSubmit">
+            <DataAnnotationsValidator />
+            <MudTabs>
+                <MudTabPanel Text="اطلاعات پایه" Icon="@Icons.Material.Filled.Info">
+                    <MudStack Spacing="2">
+                        <MudTextField @bind-Value="_vm.Name" Label="نام شعبه" Required="true" For="@(() => _vm.Name)" />
+                        <MudTextField @bind-Value="_vm.ShortName" Label="نام نمایشی" />
+                        <MudNumericField T="int" @bind-Value="_vm.Code" Label="کُد شعبه" Required="true" For="@(() => _vm.Code)" />
+                        <MudSelect T="Guid" @bind-Value="_vm.SupervisionId" Label="سرپرستی" Required="true" Dense="true">
+                            @if (_supervisions is null)
+                            {
+                                <MudSelectItem Value="Guid.Empty">در حال بارگذاری...</MudSelectItem>
+                            }
+                            else
+                            {
+                                @foreach (var s in _supervisions)
+                                {
+                                    <MudSelectItem Value="@s.Id">@s.Name</MudSelectItem>
+                                }
+                            }
+                        </MudSelect>
+                        <MudSwitch @bind-Value="_vm.IsActive" Color="Color.Success" Label="فعال" />
+                    </MudStack>
+                </MudTabPanel>
+
+                <MudTabPanel Text="راه‌های ارتباطی" Icon="@Icons.Material.Filled.ContactPhone">
+                    <MudStack Spacing="2">
+                        <MudTextField @bind-Value="_vm.Phone" Label="تلفن" />
+                        <MudTextField @bind-Value="_vm.Address" Label="آدرس" Lines="2" />
+                        <MudTextField @bind-Value="_vm.PostalCode" Label="کد پستی" />
+                    </MudStack>
+                </MudTabPanel>
+
+                <MudTabPanel Text="مختصات" Icon="@Icons.Material.Filled.LocationOn">
+                    <MudStack Row="true" Spacing="2">
+                        <MudNumericField T="decimal?" @bind-Value="_vm.Latitude" Label="Latitude" Min="-90" Max="90" />
+                        <MudNumericField T="decimal?" @bind-Value="_vm.Longitude" Label="Longitude" Min="-180" Max="180" />
+                    </MudStack>
+                </MudTabPanel>
+            </MudTabs>
+
+            <ValidationSummary class="text-error mt-2" />
+        </EditForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit" Disabled="@_submitting">
+            @if (_submitting)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mx-2" />
+            }
+            ذخیره
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public BranchDialogMode Mode { get; set; } = BranchDialogMode.Create;
+    [Parameter] public UpdateBranchModel? UpdateModel { get; set; }
+
+    private bool _submitting;
+    private CreateBranchModel _vm = new();
+    private List<SupervisionItem>? _supervisions;
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        try
+        {
+            var sups = await SupervisionService.GetSupervisionStates();
+            _supervisions = sups.Select(s => new SupervisionItem { Id = s.Id, Name = s.Name ?? s.ShortName ?? "-" }).ToList();
+        }
+        catch
+        {
+            _supervisions = new();
+            Snackbar.Add("خطا در دریافت لیست سرپرستی‌ها.", Severity.Error);
+        }
+
+        if (Mode == BranchDialogMode.Edit && UpdateModel is not null)
+        {
+      
+            _vm = new CreateBranchModel
+            {
+                Name = UpdateModel.Name,
+                ShortName = UpdateModel.ShortName,
+                Code = UpdateModel.Code,
+                SupervisionId = UpdateModel.SupervisionId,
+                Address = UpdateModel.Address,
+                PostalCode = UpdateModel.PostalCode,
+                Phone = UpdateModel.Phone,
+                Latitude = UpdateModel.Latitude,
+                Longitude = UpdateModel.Longitude,
+                IsActive = UpdateModel.IsActive
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        // trigger form submit
+        await OnSubmit();
+    }
+
+    private async Task OnSubmit()
+    {
+        if (_submitting) return;
+        _submitting = true;
+
+        try
+        {
+            OperationResult res;
+            if (Mode == BranchDialogMode.Create)
+            {
+                res = await BranchService.CreateBranchAsync(_vm, CancellationToken.None);
+            }
+            else
+            {
+                // از UpdateModel.Id استفاده می‌کنیم
+                var cmd = new UpdateBranchModel
+                {
+                    Id = UpdateModel!.Id,
+                    Name = _vm.Name,
+                    ShortName = _vm.ShortName,
+                    Code = _vm.Code,
+                    SupervisionId = _vm.SupervisionId,
+                    Address = _vm.Address,
+                    PostalCode = _vm.PostalCode,
+                    Phone = _vm.Phone,
+                    Latitude = _vm.Latitude,
+                    Longitude = _vm.Longitude,
+                    IsActive = _vm.IsActive
+                };
+                res = await BranchService.UpdateBranchAsync(cmd, CancellationToken.None);
+            }
+
+            if (res.IsSucceded)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add(res.Message ?? "عملیات ناموفق.", Severity.Warning);
+            }
+        }
+        catch
+        {
+            Snackbar.Add("خطای غیرمنتظره‌ای رخ داد.", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private sealed class SupervisionItem
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = "-";
+    }
+}
+

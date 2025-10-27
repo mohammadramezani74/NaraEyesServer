@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
+  <title>NaraEyes Logo</title>
+  <defs>
+    <style>
+      .blue { fill: none; stroke: #1E88E5; }
+      .teal { fill: none; stroke: #26A69A; }
+      .fill-blue { fill: #1E88E5; }
+      .fill-teal { fill: #26A69A; }
+      .cap-round { stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="700" fill="none"/>
+
+  <path class="blue cap-round" stroke-width="36"
+        d="M120,260
+           C260,120 520,120 660,260
+           C520,400 260,400 120,260 Z" />
+
+  <g transform="translate(390,260)">
+    <circle class="teal cap-round" stroke-width="20" r="110" />
+    <ellipse class="teal cap-round" stroke-width="14" rx="80" ry="110" />
+    <ellipse class="teal cap-round" stroke-width="14" rx="40" ry="110" />
+    <ellipse class="teal cap-round" stroke-width="14" rx="110" ry="80" />
+    <ellipse class="teal cap-round" stroke-width="14" rx="110" ry="40" />
+    <path class="teal cap-round" stroke-width="12" d="M0,-110 A110,110 0 0 1 90, -50" />
+  </g>
+
+  <g font-size="128" font-weight="700" font-family="Inter, Segoe UI, Roboto, Arial, sans-serif" transform="translate(120,560)">
+    <text class="fill-blue">Nara</text>
+    <text class="fill-teal" x="320">Eyes</text>
+  </g>
+</svg>

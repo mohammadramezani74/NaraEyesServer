@@ -1,0 +1,211 @@
+﻿@using MudBlazor
+@using System.Net.Http.Json
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.WebApplication.Components.Dialogs
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IBranchService BranchService
+
+<MudPaper Class="p-3 rounded-2xl mt-2">
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
+        <MudTextField T="string"
+                      @bind-Value="_search"
+                      Placeholder="جستجو شعبه (نام/کد/سرپرستی/تلفن/کدپستی/آدرس)..."
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="w-96"
+                      Immediate="true"
+                      DebounceInterval="350"
+                      OnDebouncedValueChanged="(_ => StateHasChanged())" />
+
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Load">رفرش</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddBranch">افزودن</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="_branches"
+              Dense="true" Hover="true" Bordered="true"
+              Filter="BranchFilter" Loading="@_loading">
+        <ColGroup>
+            <col style="width: 120px;" />
+            <col />
+            <col style="width: 220px;" />
+            <col style="width: 140px;" />
+            <col style="width: 110px;" />
+            <col style="width: 110px;" />
+        </ColGroup>
+
+        <HeaderContent>
+            <MudTh>کُد</MudTh>
+            <MudTh>نام</MudTh>
+            <MudTh>سرپرستی</MudTh>
+            <MudTh>تلفن</MudTh>
+            <MudTh>وضعیت</MudTh>
+            <MudTh class="text-end">عملیات</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd>@context.Code</MudTd>
+            <MudTd>@context.ShortName</MudTd>
+            <MudTd>@context.Supervision</MudTd>
+            <MudTd>@context.Phone</MudTd>
+            <MudTd>
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="@(context.IsActive ? Color.Success : Color.Error)"
+                         Variant="Variant.Filled">
+                    @(context.IsActive ? "فعال" : "غیرفعال")
+                </MudChip>
+            </MudTd>
+            <MudTd Class="text-end">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => EditBranch(context))" />
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => DeleteBranch(context))" />
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="my-3" />
+            }
+            else
+            {
+                <MudText Class="text-secondary">رکوردی یافت نشد.</MudText>
+            }
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private string _search = "";
+    private bool _loading = true;
+    private List<BranchesViewModel> _branches = new();
+
+    protected override async Task OnInitializedAsync() {
+        
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+            _branches = (await BranchService.GetAllBranches(CancellationToken.None)).ToList();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("خطا در دریافت لیست شعب.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool BranchFilter(BranchesViewModel b)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var s = _search.Trim();
+        return (b.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || b.Code.ToString().Contains(s, StringComparison.OrdinalIgnoreCase)
+            || (b.Supervision?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (b.Phone?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (b.PostalCode?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (b.Address?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+    public enum BranchDialogMode
+    {
+        Create,
+        Edit
+    }
+    private async Task AddBranch()
+    {
+        var parameters = new DialogParameters<BranchDialog>
+        {
+            { x => x.Mode, BranchDialogMode.Create }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = Dialog.Show<BranchDialog>("افزودن شعبه", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool ok && ok)
+        {
+            Snackbar.Add("شعبه با موفقیت ثبت شد.", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task EditBranch(BranchesViewModel vm)
+    {
+   
+        var upd = new UpdateBranchModel
+        {
+            Id = vm.Id,
+            Name = vm.Name!,
+            ShortName = vm.ShortName,
+            Code = vm.Code,
+            SupervisionId = vm.SupervisionId,
+            Address = vm.Address,
+            PostalCode = vm.PostalCode,
+            Phone = vm.Phone,
+            Latitude = vm.Latitude,
+            Longitude = vm.Longitude,
+            IsActive = vm.IsActive
+        };
+
+        var parameters = new DialogParameters<BranchDialog>
+        {
+            { x => x.Mode, BranchDialogMode.Edit },
+            { x => x.UpdateModel, upd }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = Dialog.Show<BranchDialog>($"ویرایش شعبه «{vm.Name}»", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool ok && ok)
+        {
+            Snackbar.Add("تغییرات ذخیره شد.", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task DeleteBranch(BranchesViewModel vm)
+    {
+        var ok = await Dialog.ShowMessageBox("حذف شعبه",
+            $"شعبه «{vm.Name}» حذف شود؟",
+            yesText: "حذف", cancelText: "انصراف", options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall });
+
+        if (ok is true)
+        {
+            try
+            {
+                var res = await BranchService.DeleteBranchAsync(vm.Id, CancellationToken.None);
+                if (res.IsSucceded)
+                {
+                    _branches.Remove(vm);
+                    Snackbar.Add("حذف شد.", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add(res.Message ?? "حذف ناموفق.", Severity.Warning);
+                }
+            }
+            catch
+            {
+                Snackbar.Add("حذف شعبه با خطا مواجه شد.", Severity.Error);
+            }
+        }
+    }
+}

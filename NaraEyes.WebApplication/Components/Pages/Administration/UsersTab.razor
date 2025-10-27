@@ -1,0 +1,367 @@
+﻿@using MudBlazor
+@using NaraEyes.Application.Abstraction.Identity
+@using NaraEyes.Application.Contracts.Interfaces.Identity
+@using NaraEyes.Application.Contracts.Models.Identity
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.WebApplication.Components.Dialogs
+@inject IUserService UserService
+@inject IApplicationRoleManager RoleManager
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<MudPaper Class="p-3 rounded-2xl mt-2">
+
+    <!-- Header: Search + Actions -->
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
+        <MudTextField T="string"
+                      @bind-Value="_search"
+                      Placeholder="جستجو کاربر (نام/نام‌کاربری/نقش/موبایل)..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="w-96"
+                      Immediate="true"
+                      DebounceInterval="350"
+                      OnDebouncedValueChanged="(_ => StateHasChanged())" />
+        <MudStack Row="true" Spacing="1">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Load">رفرش</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddUser">افزودن</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <!-- Table -->
+    <MudTable Items="_rows"
+              Dense="true" Hover="true" Bordered="true"
+              Filter="UserFilter" Loading="_loading">
+
+        <ColGroup>
+            <col style="width: 16%;" />
+            <col style="width: 18%;" />
+            <col style="width: 12%;" />
+            <col style="width: 14%;" />
+            <col style="width: 12%;" />
+            <col style="width: 10%;" />
+            <col style="width: 10%;" />
+            <col style="width: 8%;" />
+        </ColGroup>
+
+        <HeaderContent>
+            <MudTh>نام کاربری</MudTh>
+            <MudTh>نام کامل</MudTh>
+            <MudTh>نقش</MudTh>
+            <MudTh>موبایل</MudTh>
+            <MudTh>آخرین ورود</MudTh>
+            <MudTh>فعال</MudTh>
+            <MudTh>قفل</MudTh>
+            <MudTh class="text-end">عملیات</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <!-- UserName (نمایشی) -->
+            <MudTd DataLabel="نام کاربری">@context.UserName</MudTd>
+
+            <!-- FullName (اینلاین) -->
+            <MudTd DataLabel="نام کامل">
+                @if (_editingId == context.Id)
+                {
+                    <MudTextField T="string" @bind-Value="context.FullName" Immediate="true" Class="w-full" />
+                }
+                else
+                {
+                    @context.FullName
+                }
+            </MudTd>
+
+            <!-- Role (DropDown در حالت ادیت) -->
+            <MudTd DataLabel="نقش">
+                @if (_editingId == context.Id)
+                {
+                    <MudSelect T="Guid" @bind-Value="context.RoleId" Dense="true" Class="w-full">
+                        @foreach (var r in _roles)
+                        {
+                            <MudSelectItem Value="@r.Id">@r.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else
+                {
+                    @context.Role
+                }
+            </MudTd>
+
+            <!-- Phone -->
+            <MudTd DataLabel="موبایل">
+                @if (_editingId == context.Id)
+                {
+                    <MudTextField T="string" @bind-Value="context.PhoneNumber" Immediate="true" Class="w-full" />
+                }
+                else
+                {
+                    @context.PhoneNumber
+                }
+            </MudTd>
+
+            <!-- Last Login -->
+            <MudTd DataLabel="آخرین ورود">
+                <MudText Typo="Typo.body2" Class="text-secondary">@context.LastLoginDate</MudText>
+            </MudTd>
+
+            <!-- Active -->
+            <MudTd DataLabel="فعال">
+                @if (_editingId == context.Id)
+                {
+                    <MudSwitch @bind-Value="context.IsActive" Color="Color.Success" />
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Filled" Size="Size.Small" Color="@(context.IsActive? Color.Success: Color.Error)">
+                        @(context.IsActive ? "فعال" : "غیرفعال")
+                    </MudChip>
+                }
+            </MudTd>
+
+            <!-- Locked -->
+            <MudTd DataLabel="قفل">
+                @if (_editingId == context.Id)
+                {
+                    <MudSwitch @bind-Value="context.IsLocked" Color="Color.Error" />
+                }
+                else
+                {
+                    <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Color="@(context.IsLocked? Color.Error: Color.Success)">
+                        @(context.IsLocked ? "قفل" : "باز")
+                    </MudChip>
+                }
+            </MudTd>
+
+            <!-- عملیات -->
+            <MudTd Class="text-end">
+                @if (_editingId == context.Id)
+                {
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" OnClick="@(() => Save(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" OnClick="@Cancel" />
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Color="Color.Primary" OnClick="@(() => StartEdit(context))" />
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => Delete(context))" />
+                    </MudStack>
+                }
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="my-3" />
+            }
+            else
+            {
+                <MudText Class="text-secondary">رکوردی یافت نشد.</MudText>
+            }
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private string _search = "";
+    private bool _loading = true;
+    private Guid? _editingId;
+    private UserRow? _backup;
+
+    private List<UserRow> _rows = new();
+    private List<RoleItem> _roles = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        try
+        {
+            _loading = true; StateHasChanged();
+
+            // کاربران
+            var users = await UserService.AllUsers(CancellationToken.None);
+            _rows = users.Select(u => new UserRow
+            {
+                Id = u.Id,                // فرض: به ViewModel Id را اضافه کن؛ اگر نداری، اضافه‌اش کن
+                UserName = u.UserName,
+                FullName = u.FullName,
+                PhoneNumber = u.PhoneNumber,
+                LastLoginDate = u.LastLoginDate,
+                Role = u.Role,
+                RoleId = u.RoleId,
+                IsActive = u.IsActive,
+                IsLocked = u.IsLocked
+            }).ToList();
+
+            // نقش‌ها برای دراپ‌داون
+            var rs = await RoleManager.GetRoles(null, CancellationToken.None);
+            _roles = rs.Select(x => new RoleItem { Id = x.Id, Name = x.Name }).OrderBy(x => x.Name).ToList();
+        }
+        catch
+        {
+            Snackbar.Add("خطا در دریافت کاربران یا نقش‌ها.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false; StateHasChanged();
+        }
+    }
+
+    private bool UserFilter(UserRow u)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var s = _search.Trim();
+        return (u.UserName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (u.FullName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (u.Role?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (u.PhoneNumber?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private void StartEdit(UserRow row)
+    {
+        _editingId = row.Id;
+        _backup = row with { }; // record-like copy (see class below)
+    }
+
+    private void Cancel()
+    {
+        if (_backup is null) { _editingId = null; return; }
+        var idx = _rows.FindIndex(x => x.Id == _backup.Id);
+        if (idx >= 0) _rows[idx] = _backup;
+        _editingId = null;
+    }
+
+    private async Task Save(UserRow row)
+    {
+        try
+        {
+            if (_backup is null) { _editingId = null; return; }
+
+            // 1) Update پروفایل + Active/Locked
+            var (name, lname) = SplitFullName(row.FullName);
+            var cmd = new UpdateUserModel
+            {
+                Id = row.Id,
+                Name = name,
+                LName = lname,
+                UserName = row.UserName,
+                PhoneNumber = row.PhoneNumber,
+                IsActive = row.IsActive,
+                IsLocked = row.IsLocked // یا IsLocked بر اساس مدل نهایی‌ات
+            };
+
+            var res = await UserService.UpdateUserAsync(cmd, CancellationToken.None);
+            if (!res.IsSucceded)
+            {
+                Snackbar.Add(res.Message ?? "به‌روزرسانی کاربر ناموفق بود.", Severity.Warning);
+                Cancel(); return;
+            }
+
+            // 2) تغییر نقش (توجه: فعلاً فقط AddUserToRole داریم؛ حذف نقش‌های قبلی انجام نمی‌شود)
+            if (row.RoleId != _backup.RoleId && row.RoleId != Guid.Empty)
+            {
+                var rres = await RoleManager.AddUserToRole(row.RoleId, row.Id, CancellationToken.None);
+                if (!rres.IsSucceded)
+                {
+                    Snackbar.Add(rres.Message ?? "افزودن نقش به کاربر ناموفق بود.", Severity.Warning);
+                    // رول‌بک ظاهری
+                    row.RoleId = _backup.RoleId;
+                    row.Role = _backup.Role;
+                }
+                else
+                {
+                    // نام نقش انتخابی را در جدول به‌روز کن
+                    row.Role = _roles.FirstOrDefault(x => x.Id == row.RoleId)?.Name ?? row.Role;
+                }
+            }
+
+            _editingId = null;
+            Snackbar.Add("تغییرات ذخیره شد.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("ذخیره تغییرات با خطا مواجه شد.", Severity.Error);
+            Cancel();
+        }
+    }
+
+    private async Task AddUser()
+    {
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = Dialog.Show<UserCreateDialog>("ایجاد کاربر", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool ok && ok)
+        {
+            Snackbar.Add("کاربر ایجاد شد.", Severity.Success);
+            await Load();
+        }
+    }
+
+    private async Task Delete(UserRow row)
+    {
+        var ok = await Dialog.ShowMessageBox("حذف کاربر",
+            $"کاربر «{row.UserName}» حذف شود؟",
+            yesText: "حذف", cancelText: "انصراف",
+            options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall });
+
+        if (ok is true)
+        {
+            try
+            {
+                var res = await UserService.DeleteUserAsync(row.Id, CancellationToken.None);
+                if (res.IsSucceded)
+                {
+                    _rows.Remove(row);
+                    Snackbar.Add("حذف شد.", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add(res.Message ?? "حذف ناموفق.", Severity.Warning);
+                }
+            }
+            catch
+            {
+                Snackbar.Add("حذف کاربر با خطا مواجه شد.", Severity.Error);
+            }
+        }
+    }
+
+    private static (string name, string lname) SplitFullName(string? fullName)
+    {
+        var s = (fullName ?? "").Trim();
+        if (string.IsNullOrEmpty(s)) return ("", "");
+        var parts = s.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 1) return (parts[0], "");
+        return (parts[0], string.Join(' ', parts.Skip(1)));
+    }
+
+    private record RoleItem
+    {
+        public Guid Id { get; init; }
+        public string Name { get; init; } = "";
+    }
+
+
+    private record UserRow
+    {
+        public Guid Id { get; set; }
+        public string UserName { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public Guid RoleId { get; set; }
+        public string? Role { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? LastLoginDate { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsLocked { get; set; }
+
+
+    }
+}

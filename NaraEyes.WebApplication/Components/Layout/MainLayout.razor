@@ -1,0 +1,226 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Identity
+@using NaraEyes.Application.Contracts.Models.Identity
+@using NaraEyes.WebApplication.Components.Dialogs
+
+@inherits LayoutComponentBase
+  @inject IJSRuntime Js
+  @inject IUserService service
+  @inject IDialogService dialogService
+
+  <MudRTLProvider RightToLeft="true">
+<MudThemeProvider Theme="theme" IsDarkMode="IsDarkMode"/>
+<MudPopoverProvider />
+
+
+<MudDialogProvider />
+
+<MudSnackbarProvider />
+<MudLayout>
+
+        <AuthorizeView>
+            <Authorized>
+                <MudAppBar Elevation="3">
+               
+                    <MudIconButton OnClick="@((e) => OpenDrwer())" Color="Color.Inherit" Edge="Edge.Start" Icon="@Icons.Material.Filled.Menu"></MudIconButton>
+                    <MudText Typo="Typo.h5" Class="ml-3">مانیتورینگ</MudText>
+                    <MudSpacer />
+                    <MudIconButton @onclick="ChangePassword" Icon="@Icons.Material.Filled.LockReset" Color="Color.Inherit" title="تغییر رمز عبور"></MudIconButton>
+                    <form action="/Account/logout" method="post" class="m-0 p-0">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="returnUrl" value="/" />
+                        <MudIconButton Color="Color.Error"
+                                       Icon="@Icons.Material.Filled.ExitToApp"
+                                       ButtonType="ButtonType.Submit"
+                                       Title="خروج" />
+                    </form>
+
+                    <MudIconButton @onclick="ChangeTheme" Icon="@DarkLightModeButton" Color="Color.Inherit" title="تغییر تم"></MudIconButton>
+                </MudAppBar>
+                <MudDrawer @bind-Open="drawerOpen" ClipMode="DrawerClipMode.Always" Anchor="Anchor.Right">
+                    <NavMenu></NavMenu>
+                </MudDrawer>
+            </Authorized>
+            <NotAuthorized>
+
+
+            </NotAuthorized>
+        </AuthorizeView>
+    <MudMainContent>
+        @Body
+    </MudMainContent>
+   
+</MudLayout>
+</MudRTLProvider>
+
+@code{
+
+    private bool drawerOpen = true;
+    private MudTheme? theme = null;
+    private bool IsDarkMode = false;
+    public string DarkLightModeButton => IsDarkMode switch
+    {
+        true => Icons.Material.Filled.LightMode,
+        false => Icons.Material.Filled.DarkMode
+    };
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+
+        var storedMode = await Js.InvokeAsync<string>("localStorage.getItem", "isDarkMode");
+        if (!string.IsNullOrEmpty(storedMode))
+        {
+            IsDarkMode = storedMode == "true";
+        }
+
+    }
+    protected override async Task OnInitializedAsync()
+    {
+
+
+        {
+            theme = new MudTheme()
+                {
+                // PseudoCss=new PseudoCss
+                // {
+                // Scope=":root",
+                // },
+                    Typography = new Typography
+                    {
+                        Default = new DefaultTypography
+                        {
+                            FontFamily = new[] { "IRANSans" }
+                        }
+
+                    },
+                    LayoutProperties = new LayoutProperties
+                    {
+                        DefaultBorderRadius = "12px"
+                    },
+
+                // --- Light (شاداب و رسمی برای اپ بانکی) ---
+                    PaletteLight = new PaletteLight
+                    {
+                        Primary = "#1565C0",        
+                        Secondary = "#00B8D9",     
+                        Tertiary = "#6D28D9",        
+                        Info = "#0288D1",
+                        Success = "#2E7D32",
+                        Warning = "#ED6C02",
+                        Error = "#D32F2F",
+
+                        Background = "#F6F8FB",       
+                        Surface = "#FFFFFF",          
+                        AppbarBackground = "#FFFFFF",
+                        AppbarText = "#1F2937",
+
+                        DrawerBackground = "#FFFFFF",
+                        DrawerText = "#374151",
+                        DrawerIcon = "#4B5563",
+
+                        TextPrimary = "#111827",
+                        TextSecondary = "#4B5563",
+
+                        LinesDefault = "#E5E7EB",     
+                        LinesInputs = "#CBD5E1",       
+                        TableLines = "#E5E7EB",
+                        Divider = "#E5E7EB",
+
+                        ActionDefault = "#1F2937",
+                        ActionDisabled = "#9CA3AF",
+                        ActionDisabledBackground = "#E5E7EB"
+                    },
+
+                // --- Dark (آبی/مشکی حرفه‌ای) ---
+                    PaletteDark = new PaletteDark
+                    {
+                        Primary = "#64B5F6",           // Light Blue برای کنتراست عالی روی تیره
+                        Secondary = "#82B1FF",         // Cornflower برای اکستنت
+                        Tertiary = "#8B5CF6",          // Purple accent
+                        Info = "#64B5F6",
+                        Success = "#34D399",           // سبز ملایم و خوانا
+                        Warning = "#FBBF24",
+                        Error = "#EF5350",
+
+                        Background = "#0B1220",        // تقریبا مشکی با ته‌مایه آبی (bank-grade)
+
+                        Surface = "#0F172A",           // کارت‌ها/پنل‌ها (Slate 900~800)
+                        AppbarBackground = "#0B1220",
+                        AppbarText = "#E5E7EB",
+
+                        DrawerBackground = "#0B1220",
+                        DrawerText = "#E2E8F0",
+                        DrawerIcon = "#A7B1C2",
+
+                        TextPrimary = "#E5E7EB",
+                        TextSecondary = "#94A3B8",
+
+                        LinesDefault = "#233044",     
+                        LinesInputs = "#2A3A55",
+                        TableLines = "#233044",
+                        Divider = "#233044",
+
+                        ActionDefault = "#E5E7EB",
+                        ActionDisabled = "#64748B",
+                        ActionDisabledBackground = "#1E293B"
+                    }
+                };
+        }
+    }
+    public void OpenDrwer()
+    {
+        drawerOpen = !drawerOpen;
+    }
+    public async Task ChangeTheme()
+    {
+        IsDarkMode = !IsDarkMode;
+        await Js.InvokeVoidAsync("localStorage.setItem", "isDarkMode", IsDarkMode.ToString().ToLower());
+    }
+    [Inject] ISnackbar Snackbar { get; set; } = default!;
+    public async Task ChangePassword()
+    {
+        var parameters = new DialogParameters
+        {
+            ["Model"] = new ChangePasswordModel("", "", "")
+        };
+
+        // آپشن‌های ظاهری دیالوگ
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            CloseOnEscapeKey = true,
+            FullWidth = true,
+            MaxWidth = MaxWidth.Small,
+     
+            Position = DialogPosition.TopCenter
+        };
+
+
+        var dialog = dialogService.Show<ChangePasswordDialog>("تغییر رمز عبور", parameters, options);
+
+        // انتظار برای نتیجه
+        var result = await dialog.Result;
+        if (result.Canceled) return;
+
+        // استخراج مدل برگردانده‌شده از دیالوگ
+        if (result.Data is not ChangePasswordModel model)
+        {
+            Snackbar.Add("نتیجهٔ نامعتبر از دیالوگ دریافت شد.", Severity.Error);
+            return;
+        }
+
+        try
+        {
+            // صدا زدن سرویس تغییر رمز
+            var op = await service.ChangePassword(model, CancellationToken.None);
+            if (op.IsSucceded)
+                Snackbar.Add("رمز عبور با موفقیت تغییر کرد.", Severity.Success);
+            else
+                Snackbar.Add(string.IsNullOrWhiteSpace(op.Message) ? "تغییر رمز ناموفق بود." : op.Message, Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"خطای غیرمنتظره در تغییر رمز: {ex.Message}", Severity.Error);
+        }
+    }
+}

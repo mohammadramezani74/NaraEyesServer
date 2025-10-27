@@ -1,0 +1,554 @@
+﻿@page "/bulk-operations"
+@using System
+@using System.Linq
+@using System.Collections.Generic
+@using CurrieTechnologies.Razor.SweetAlert2
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Interfaces.Bulkoperations
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Models.Bulkoperations
+@using NaraEyes.Domain.Entities.BulkOperation.Enums
+@using NaraEyes.WebApplication.Components.Dialogs
+@using static NaraEyes.WebApplication.Components.Dialogs.FileUploadDialog
+@inject IBranchService BranchService
+@inject ISupervisionStateService _supervisionService
+@inject IBulkoperationsService _bulkServices
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
+@inject NavigationManager nv
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6">
+    <MudGrid Spacing="3">
+        <!-- فیلترها -->
+        <MudItem xs="12" md="4">
+            <MudTextField T="string" @bind-Value="_search" Label="جستجو" Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudSelect T="Guid?" Label="سرپرستی" Variant="Variant.Outlined"
+                     Clearable="true" ValueChanged="OnSupervisionChanged">
+                @if (_supervisories is not null)
+                {
+                    @foreach (var s in _supervisories)
+                    {
+                        <MudSelectItem Value="@((Guid?)s.Id)">@s.ShortName</MudSelectItem>
+                    }
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudSelect T="Guid?" Label="شعبه" Variant="Variant.Outlined"
+                       @bind-Value="_branchId" Clearable="true">
+                @if (_branches is not null)
+                {
+                    @foreach (var s in _branches)
+                    {
+                        <MudSelectItem Value="@((Guid?)s.Id)">@s.ShortName</MudSelectItem>
+                    }
+                }
+            </MudSelect>
+        </MudItem>
+        
+
+
+        <!-- جدول در دسترس -->
+        <MudItem xs="12" md="5">
+            <MudPaper Class="p-3 rounded-2xl" Style="max-height: 400px; overflow-y: auto; ">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.subtitle1">دستگاه‌های در دسترس</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @(_filteredAvailable.Count()) مورد
+                    </MudText>
+                </MudStack>
+
+                <MudTable Items="_filteredAvailable" Hover="true" Dense="true" Scroll="true" MaxHeight="400px">
+                    <HeaderContent>
+                        <MudTh >Ip</MudTh>
+                        <MudTh>نام</MudTh>
+                        <MudTh>سریال</MudTh>
+                        <MudTh>شعبه</MudTh>
+                        <MudTh style="width:56px;"></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                     
+                        <MudTd>@context.Ip</MudTd>
+                        <MudTd>@context.Model</MudTd>
+                        <MudTd>@context.SerialNo</MudTd>
+                        <MudTd>@context.Branch</MudTd>
+                        <MudTd>
+                            <!-- انتقال تکی به انتخاب‌شده‌ها -->
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Primary" Size="Size.Small"
+                                           Title="انتقال تکی" OnClick="@(() => MoveOneToSelected(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- دکمه‌های انتقال -->
+        <MudItem xs="12" md="2">
+            <MudStack Class="h-full" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2">
+        
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                           Disabled="@(!_filteredAvailable.Any())"
+                           OnClick="MoveAllFilteredToSelected">
+                    انتقال همهٔ فیلترشده‌ها &raquo;&raquo;
+                </MudButton>
+
+                <MudDivider Class="my-4" />
+
+
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary"
+                           Disabled="@(!_selectedDevices.Any())"
+                           OnClick="MoveAllToAvailable">
+                    &laquo;&laquo; برگرداندن همه
+                </MudButton>
+            </MudStack>
+        </MudItem>
+
+        <!-- جدول انتخاب‌شده -->
+        <MudItem xs="12" md="5">
+            <MudPaper Class="p-3 rounded-2xl " Style="max-height: 400px; overflow-y: auto; ">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.subtitle1">دستگاه‌های انتخاب‌شده</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @_selectedDevices.Count مورد
+                    </MudText>
+                </MudStack>
+
+                <MudTable Items="_selectedDevices" Hover="true" Dense="true" >
+                    <HeaderContent>
+
+                        <MudTh>Ip</MudTh>
+                        <MudTh>مدل</MudTh>
+                        <MudTh>سریال</MudTh>
+                        <MudTh>شعبه</MudTh>
+                        <MudTh style="width:56px;"></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                     
+                        <MudTd>@context.Ip</MudTd>
+                        <MudTd>@context.Model</MudTd>
+                        <MudTd>@context.SerialNo</MudTd>
+                        <MudTd>@context.Branch</MudTd>
+                        <MudTd>
+                            <MudIconButton Icon="@Icons.Material.Filled.ArrowForward" Color="Color.Error" Size="Size.Small"
+                                           Title="برگرداندن تکی" OnClick="@(() => MoveOneToAvailable(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudSelect T="OperationType" Label="نوع عملیات" Variant="Variant.Outlined" Value="_opType" ValueChanged="OnOperationTypeChanged">
+                @foreach (OperationType op in Enum.GetValues(typeof(OperationType)))
+                {
+                    <MudSelectItem Value="@op">@GetOpTitle(op)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            @if (_opType == OperationType.FileSend)
+            {
+                <MudTextField T="string" @bind-Value="_fakeFilePath" Label="مسیر فایل (نمونه)" Variant="Variant.Outlined" />
+            }
+            else if (_opType == OperationType.SystemResources)
+            {
+                <MudSwitch T="bool" @bind-Checked="_includePerf" Color="Color.Primary" Label="شامل Performance" />
+            }
+        </MudItem>
+
+
+    </MudGrid>
+</MudContainer>
+<script>
+        window.downloadBase64File = (contentType, base64Data, fileName) => {
+      const a = document.createElement('a');
+      a.href = `data:${contentType};base64,${base64Data}`;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+</script>
+
+
+@code {
+    private bool _hasMarkedAvailable;
+    private bool _hasMarkedSelected;
+    private bool _selectAllAvailableAllFiltered;
+    public bool _selectAllSelectedAll;
+    private IEnumerable<GroupedDeviceViewModel> _filteredAvailable =>
+    _availableDevices
+       .Where(d => string.IsNullOrWhiteSpace(_search) ||
+            d.Ip.Contains(_search!, StringComparison.OrdinalIgnoreCase) ||
+            d.SerialNo?.Contains(_search!, StringComparison.OrdinalIgnoreCase) == true ||
+             d.Branch?.Contains(_search!, StringComparison.OrdinalIgnoreCase) == true
+            ||
+            d.Model?.Contains(_search!, StringComparison.OrdinalIgnoreCase) == true)
+        .Where(d => _branchId == null || d.BranchId == _branchId)
+           .Where(d => _supervisionId == null || d.supervisionId == _supervisionId);
+    private void ClearAllMarksAvailable()
+    {
+        foreach (var d in _availableDevices)
+        {
+            d.IsMarked = false;
+        }
+        _selectAllAvailableAllFiltered = false; // لغو انتخاب در هدر جدول
+        RecalcHasMarks(); // محاسبه مجدد وضعیت انتخاب‌ها
+    }
+    private void ClearAllMarksSelected()
+    {
+        foreach (var d in _selectedDevices)
+        {
+            d.IsMarked = false;
+        }
+        _selectAllSelectedAll = false;
+        RecalcHasMarks(); 
+    }
+    // ====== مدل و enum ======
+    private Guid? _branchId;
+    private Guid? _supervisionId;
+    private void OnBranchChanged(Guid? id) { _branchId = id; StateHasChanged(); }
+
+
+
+    private static string GetOpTitle(OperationType op) => op switch
+    {
+
+        OperationType.FileSend => "ارسال سراسری فایل",
+        OperationType.SystemResources => "دریافت منابع سیستمی",
+        OperationType.CameraVersion => "دریافت وضعیت دوربین ها",
+        OperationType.AgentVersion => "دریافت ورژن ایجنت ها ",
+        OperationType.Reset => "ریست دستگاه‌ها",
+        _ => "انتخاب کنید"
+    };
+
+    // ====== State عمومی ======
+    private string? _search;
+    private string? _selectedSupervisor;
+    private string? _selectedBranch;
+    private OperationType _opType = OperationType.None;
+    private string? _fakeFilePath;
+    private bool _includePerf;
+
+    private  List<SupervisionStateViewModel>? _supervisories = new() ;
+    private List<BranchesViewModel>? _branches;
+
+    // ====== داده‌ها ======
+    private List<GroupedDeviceViewModel> _availableDevices = new();
+    private GroupedDeviceFilterViewModel filter = new GroupedDeviceFilterViewModel(null, null, null);
+
+    private List<GroupedDeviceViewModel> _selectedDevices = new();
+
+    // ====== Helper: Sync flags ======
+    private void RecalcHasMarks()
+    {
+        _hasMarkedAvailable = _availableDevices.Any(x => x.IsMarked);
+        _hasMarkedSelected = _selectedDevices.Any(x => x.IsMarked);
+
+        StateHasChanged();
+    }
+
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+
+        _supervisories = await _supervisionService.GetSupervisionStates();
+        await Task.Delay(500);
+        _availableDevices = await _bulkServices.GetDevices(filter);
+
+        StateHasChanged();
+    }
+
+
+
+
+
+
+    // ====== انتقال تکی ======
+    private void MoveOneToSelected(GroupedDeviceViewModel d)
+    {
+        if (_availableDevices.Remove(d))
+        {
+            d.IsMarked = false;
+            _selectedDevices.Add(d);
+            RecalcHasMarks();
+        }
+    }
+
+    private void MoveOneToAvailable(GroupedDeviceViewModel d)
+    {
+        if (_selectedDevices.Remove(d))
+        {
+            d.IsMarked = false;
+            _availableDevices.Add(d);
+            RecalcHasMarks();
+        }
+    }
+
+    // ====== انتقال گروهی ======
+    private void MoveMarkedToSelected()
+    {
+        var pick = _availableDevices.Where(d => d.IsMarked).ToList();
+        if (pick.Count == 0) return;
+
+        foreach (var d in pick)
+        {
+            d.IsMarked = false;
+            _availableDevices.Remove(d);
+            _selectedDevices.Add(d);
+        }
+        RecalcHasMarks();
+    }
+
+    private void MoveAllFilteredToSelected()
+    {
+        var pick = _filteredAvailable.ToList();
+        if (pick.Count == 0) return;
+
+        foreach (var d in pick)
+        {
+            d.IsMarked = false;
+            _availableDevices.Remove(d);
+            _selectedDevices.Add(d);
+        }
+        RecalcHasMarks();
+    }
+
+    private void MoveMarkedToAvailable()
+    {
+        var pick = _selectedDevices.Where(d => d.IsMarked).ToList();
+        if (pick.Count == 0) return;
+
+        foreach (var d in pick)
+        {
+            d.IsMarked = false;
+            _selectedDevices.Remove(d);
+            _availableDevices.Add(d);
+        }
+        RecalcHasMarks();
+    }
+
+    private void MoveAllToAvailable()
+    {
+        if (_selectedDevices.Count == 0) return;
+        foreach (var d in _selectedDevices.ToList())
+        {
+            d.IsMarked = false;
+            _selectedDevices.Remove(d);
+            _availableDevices.Add(d);
+        }
+        RecalcHasMarks();
+    }
+
+    private void ClearAllSelections()
+    {
+        foreach (var d in _availableDevices) d.IsMarked = false;
+        foreach (var d in _selectedDevices) d.IsMarked = false;
+        RecalcHasMarks();
+    }
+
+    private void SendCommand()
+    {
+        var targets = _selectedDevices.ToList();
+        if (targets.Count == 0)
+        {
+            Console.WriteLine("هیچ دستگاهی انتخاب نشده است.");
+            return;
+        }
+
+        Console.WriteLine($"Command={_opType}, Targets={targets.Count}, File='{_fakeFilePath}', IncludePerf={_includePerf}");
+        foreach (var t in targets) ;
+
+    }
+    private async Task OnSupervisionChanged(Guid? value)
+    {
+        _supervisionId = value;
+        _branchId = null;
+        if (value.HasValue)
+        {
+
+            _branches = await BranchService.GetBranchesBySupervisionIdAsync(value.Value);
+            StateHasChanged();
+        }
+        else
+        {
+            _branches = new List<BranchesViewModel>(); // در صورت انتخاب نکردن سرپرستی، لیست شعبه‌ها خالی می‌شود
+        }
+        StateHasChanged();
+    }
+    private async Task OnOperationTypeChanged(OperationType newValue)
+    {
+        if (!_selectedDevices.Any())
+        {
+            Snackbar.Add("هیچ دستگاهی انتخاب نشده است!", Severity.Error);
+            return;
+        }
+        switch (newValue)
+        {
+            case OperationType.FileSend:
+                {
+
+                    var dialog = await DialogService.ShowAsync<FileUploadDialog>();
+                    var result = await dialog.Result;
+
+                    if (!result.Canceled && result.Data is UploadResult uploadResult)
+                    {
+                        // var confirmation = await JS.InvokeAsync<bool>("confirm", $"آیا اطمینان دارید که این عملیات برای {_selectedDevices.Count} دستگاه‌های انتخاب شده انجام شود؟");
+                      var basxe=  nv.BaseUri;
+                        var resultupload=await  _bulkServices.BulkFileUpload(uploadResult.File, _selectedDevices,basxe);
+
+                        if (resultupload.IsSucceded)
+                        {
+                            Snackbar.Add("آپلود فایل با موفقیت انجام شد!", Severity.Success);
+                        }
+                        else
+                        {
+                            Snackbar.Add(resultupload.Message, Severity.Error);
+                        }
+
+                    }
+
+                    break;
+                }
+            case OperationType.SystemResources:
+                {
+                    SweetAlertResult alert = await Swal.FireAsync(new SweetAlertOptions
+                    {
+                        Title = "آیا از دریافت گزارش  منابع سیستمی اطمینان دارید",
+                        Text = $"آیا اطمینان دارید که این عملیات برای {_selectedDevices.Count} دستگاه‌ انتخاب شده انجام شود؟",
+                        Icon = SweetAlertIcon.Warning,
+                        ShowCancelButton = true,
+                        ConfirmButtonText = "بله!",
+                        CancelButtonText = "خیر"
+                    });
+
+                    if (!alert.IsConfirmed)
+                    {
+                        return;
+                    }
+
+
+                    var base64 = await _bulkServices.CreateExcelFileAsync(_selectedDevices, OperationType.SystemResources);
+
+                    if (string.IsNullOrWhiteSpace(base64))
+                    {
+                        await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                        return;
+                    }
+
+                    var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    var fileName = $"گزارش-منابع-سیستمی-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+               
+                    await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+
+                    break;
+                }
+            case OperationType.AgentVersion:
+                {
+                    SweetAlertResult alert = await Swal.FireAsync(new SweetAlertOptions
+                    {
+                        Title = "آیا از دریافت گزارش ورژن ایجنت ها اطمینان دارید",
+                        Text = $"آیا اطمینان دارید که این عملیات برای {_selectedDevices.Count} دستگاه‌ انتخاب شده انجام شود؟",
+                        Icon = SweetAlertIcon.Warning,
+                        ShowCancelButton = true,
+                        ConfirmButtonText = "بله!",
+                        CancelButtonText = "خیر"
+                    });
+
+                    if (!alert.IsConfirmed)
+                    {
+                        return;
+                    }
+
+                    var base64 = await _bulkServices.CreateExcelFileAsync(_selectedDevices, OperationType.AgentVersion);
+                    if (string.IsNullOrWhiteSpace(base64))
+                    {
+                        await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                        return;
+                    }
+
+                    var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    var fileName = $"گزارش-ورژن-ایجنت-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+                    await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+
+                    break;
+                }
+            case OperationType.CameraVersion:
+                {
+                    SweetAlertResult alert = await Swal.FireAsync(new SweetAlertOptions
+                    {
+                        Title = "آیا از دریافت گزارش صحت سلامت دوربین ها اطمینان دارید",
+                        Text = $"آیا اطمینان دارید که این عملیات برای {_selectedDevices.Count} دستگاه‌ انتخاب شده انجام شود؟",
+                        Icon = SweetAlertIcon.Warning,
+                        ShowCancelButton = true,
+                        ConfirmButtonText = "بله!",
+                        CancelButtonText = "خیر"
+                    });
+
+                    if (!alert.IsConfirmed)
+                    {
+                        return;
+                    }
+                    var base64 = await _bulkServices.CreateExcelFileAsync(_selectedDevices, OperationType.CameraVersion);
+                    if (string.IsNullOrWhiteSpace(base64))
+                    {
+                        await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                        return;
+                    }
+
+                    var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                    var fileName = $"گزارش-وضعیت-دوربین ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+                    await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+
+                    break;
+                }
+            case OperationType.Reset:
+                {
+                    SweetAlertResult alert = await Swal.FireAsync(new SweetAlertOptions
+                    {
+                        Title = "آیا از راه اندازی مجدد دستگاه ها اطمینان دارید",
+                        Text = $"آیا اطمینان دارید که این عملیات برای {_selectedDevices.Count} دستگاه‌ انتخاب شده انجام شود؟",
+                        Icon = SweetAlertIcon.Warning,
+                        ShowCancelButton = true,
+                        ConfirmButtonText = "بله!",
+                        CancelButtonText = "خیر"
+                    });
+
+                    if (!alert.IsConfirmed)
+                    {
+                        return;
+                    }
+                    var resultupload = await _bulkServices.RestartSelectedDevices(_selectedDevices);
+                    if (resultupload.IsSucceded)
+                    {
+                        Snackbar.Add("ریست دستگاه هابا موفقیت انجام شد!", Severity.Success);
+                    }
+                    else
+                    {
+                        Snackbar.Add("ریستارت دستگاه ها با موفقیت انجام نشد!", Severity.Error);
+                    }
+                    break;
+                }
+
+        }
+     
+    }
+}

@@ -1,0 +1,434 @@
+﻿@page "/devices/{ip}"
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Interfaces.Modules
+@using NaraEyes.Application.Contracts.Models.Modules
+@using NaraEyes.Application.Contracts.Models.Modules.CDM
+@using NaraEyes.Application.Contracts.Utilities
+@using NaraEyes.Domain.Enumerations
+@using NaraEyes.WebApplication.Components.Dialogs
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDeviceService service
+@inject IModuleServices _moduleServices
+@inject IDialogService Dialog
+
+
+<PageTitle>Device Detail</PageTitle>
+
+<style>
+
+    .mini-wrap {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 12px;
+        height: 100%;
+    }
+
+    .mini {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 12px;
+        height: 100%;
+        color: var(--mud-palette-text-primary);
+    }
+    @@media (max-width: 960px) {
+        .mini-wrap
+
+    {
+        grid-template-columns: repeat(2,minmax(0,1fr));
+    }
+
+    }
+    @@media (max-width: 600px) {
+        .mini-wrap
+
+    {
+        grid-template-columns: 1fr;
+    }
+
+    }
+    .gauge-wrap {
+        display: grid;
+        grid-template-columns: repeat(3,1fr);
+        gap: 12px;
+    }
+    @@media (max-width: 900px) {
+        .gauge-wrap
+
+    {
+        grid-template-columns: 1fr;
+    }
+
+    }
+
+    .gauge-card {
+        display: flex;
+        align-items: center;
+        gap: .9rem;
+        padding: .9rem;
+        border-radius: 16px;
+    }
+
+    .gauge-ring {
+        position: relative;
+        width: 76px;
+        height: 76px;
+        display: grid;
+        place-items: center;
+    }
+
+    .gauge-value {
+        position: absolute;
+        font-weight: 700;
+        font-size: .95rem;
+    }
+
+    .k-label {
+        line-height: 1.2;
+    }
+</style>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mx-auto pa-4">
+
+<MetricsComponents DeviceIp="@ip"></MetricsComponents>
+
+    <!-- XFS Status -->
+    <MudCard Class="rounded-2xl mb-4">
+        <MudCardHeader>
+            <div class="d-flex align-center" style="gap:.5rem">
+                <MudIcon Icon="@Icons.Material.Filled.Build" />
+                <MudText Typo="Typo.subtitle1" Class="fw-bold">XFS وضعیت ماژول‌ها</MudText>
+            </div>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudGrid>
+                @foreach (var m in _xfsModules)
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <MudPaper Class="p-3 rounded-xl d-flex flex-column" Style="gap:.5rem; height:100%">
+                            <div class="d-flex align-center justify-space-between">
+                                <MudText Typo="Typo.body1" Class="fw-semibold">@m.Name</MudText>
+                                <MudChip T="string" Color="@GetXfsColor(m.HealthStatus)" Variant="Variant.Filled" Size="Size.Small">@m.Status</MudChip>
+                            </div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@m.Description</MudText>
+                            <div class="mt-auto d-flex" style="gap:.5rem">
+                                @if (m.Name == ModuleCreationHelper.Dispenser ||
+                                                              m.Name == ModuleCreationHelper.IDC ||
+                                                              m.Name == ModuleCreationHelper.Ptr
+                                  )
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RestartAlt" Disabled="@IsResetting(m)"
+                                    OnClick="@(() => ResetModule(m))">ریست</MudButton>}
+                                @if (IsResetting(m))
+                                {
+                                    <MudProgressCircular Class="ms-1" Size="Size.Small" Color="Color.Secondary" Indeterminate="true" />
+                                  
+                                }
+                                <MudButton Variant="Variant.Text" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Info" OnClick="@(() => GetInfo(m.ModuleId,m.Name))">جزئیات</MudButton>
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudCardContent>
+    </MudCard>
+
+    <!-- Cassettes -->
+    <MudCard Class="rounded-2xl">
+        <MudCardHeader>
+            <div class="d-flex align-center" style="gap:.5rem">
+                <MudIcon Icon="@Icons.Material.Filled.AttachMoney" />
+                <MudText Typo="Typo.subtitle1" Class="fw-bold">اطلاعات کاست‌ها</MudText>
+            </div>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudTable T="Cassette" Items="@_cassettes" Dense="true" Hover="true" Bordered="true" Class="rounded-xl overflow-hidden">
+                <HeaderContent>
+                    <MudTh>نام</MudTh>
+                    <MudTh>نوع</MudTh>
+                    <MudTh>ارزش</MudTh>
+                    <MudTh>واحد</MudTh>
+                    <MudTh>ظرفیت</MudTh>
+                    <MudTh>مانده</MudTh>
+                    <MudTh>وضعیت</MudTh>
+                    <MudTh>موجودی</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="نام">@context.Name</MudTd>
+                    <MudTd DataLabel="نوع">@context.Type</MudTd>
+                    <MudTd DataLabel="ارزش">@context.Denomination.ToMoney()</MudTd>
+                    <MudTd DataLabel="واحد">@context.Currency</MudTd>
+                    <MudTd DataLabel="ظرفیت">@context.Capacity.ToString("N0")</MudTd>
+                    <MudTd DataLabel="مانده">
+                        <div class="d-flex align-center">
+                            <MudProgressLinear Value="@context.FillPercent" Max="100" Rounded="true" Class="me-2" Style="width:160px" />
+                            <MudText Typo="Typo.caption">@($"{context.Remaining:N0} ({context.FillPercent:0}%)")</MudText>
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="وضعیت">
+                        @if (context.Name == "LCU00" || context.Name == "PCU00")
+                        {
+                            <MudChip T="string" Color="@GetCassetteColor("OK")" Variant="Variant.Filled" Size="Size.Small">Ok</MudChip>
+                        }
+                        else{
+                        <MudChip T="string" Color="@GetCassetteColor(context.Status)" Variant="Variant.Filled" Size="Size.Small">@context.Status</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="موجودی">
+           
+                        <MudTd DataLabel="موجودی">@context.TotalMoney</MudTd>
+                        
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudCardContent>
+    </MudCard>
+
+</MudContainer>
+
+@code {
+    [Parameter] public string ip { get; set; }
+    private  string Dispenser { get; set; }
+    private string IDC = "کارت خوان";
+
+    private string Ptr = "پرینتر رسید";
+    private string Cam = "دوربین";
+    private string Sensors = "سنسورها";
+    private readonly HashSet<Guid> _resetting = new();
+
+    // هلپر
+    private bool IsResetting(XfsModule m) => _resetting.Contains(m.ModuleId);
+
+    // ===== Fake models =====
+    private class DeviceHeader
+    {
+        public string DisplayName { get; set; } = "";
+        public string Branch { get; set; } = "";
+        public string SerialNo { get; set; } = "";
+        public string OperatorName { get; set; } = "";
+        public DateTime LastSeen { get; set; }
+        public int LastPingMs { get; set; }
+        public double TotalRamGb { get; set; }
+        public string CpuModel { get; set; } = "";
+    }
+
+
+    private DeviceHeader _device = new();
+    private List<XfsModule> _xfsModules = new();
+    private List<Cassette> _cassettes = new();
+    private CancellationTokenSource _loadCts;
+
+    // ===== Chart state (Used/Free) =====
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        _loadCts = new CancellationTokenSource();
+        Dispenser = ModuleCreationHelper.Dispenser;
+        IDC = ModuleCreationHelper.IDC;
+        Ptr = ModuleCreationHelper.Ptr;
+        Cam = ModuleCreationHelper.Cam;
+        Sensors = ModuleCreationHelper.Sensors;
+        await Task.Delay(500);
+
+        _xfsModules =await  _moduleServices.GetModulesStatus(ip,_loadCts.Token).ConfigureAwait(true);
+        await Task.Delay(500);
+        _cassettes = await _moduleServices.GetCassetInfo(ip, _loadCts.Token);
+
+
+    }
+
+
+
+    private RenderFragment MiniInfoCard(string icon, string title, string value) => __builder =>
+    {
+        var i = 0;
+        __builder.OpenComponent<MudPaper>(i++); __builder.AddAttribute(i++, "Class", "p-3 rounded-xl h-100");
+        __builder.AddAttribute(i++, "ChildContent", (RenderFragment)(__b =>
+        {
+            var j = 0;
+            __b.OpenElement(j++, "div"); __b.AddAttribute(j++, "class", "d-flex align-center"); __b.AddAttribute(j++, "style", "gap:.75rem");
+            __b.OpenComponent<MudIcon>(j++); __b.AddAttribute(j++, "Icon", icon); __b.AddAttribute(j++, "Size", Size.Medium); __b.CloseComponent();
+            __b.OpenElement(j++, "div");
+            __b.OpenComponent<MudText>(j++); __b.AddAttribute(j++, "Typo", Typo.caption); __b.AddContent(j++, title); __b.CloseComponent();
+            __b.OpenComponent<MudText>(j++); __b.AddAttribute(j++, "Typo", Typo.body1); __b.AddAttribute(j++, "Class", "fw-bold"); __b.AddContent(j++, value); __b.CloseComponent();
+            __b.CloseElement();
+            __b.CloseElement();
+        }));
+        __builder.CloseComponent();
+    };
+
+    private RenderFragment KeyValueRow(string icon, string key, string value) => __builder =>
+    {
+        var i = 0;
+        __builder.OpenComponent<MudPaper>(i++); __builder.AddAttribute(i++, "Class", "px-3 py-2 rounded-lg");
+        __builder.AddAttribute(i++, "ChildContent", (RenderFragment)(__b =>
+        {
+            var j = 0;
+            __b.OpenElement(j++, "div"); __b.AddAttribute(j++, "class", "d-flex align-center justify-space-between");
+            __b.OpenElement(j++, "div"); __b.AddAttribute(j++, "class", "d-flex align-center"); __b.AddAttribute(j++, "style", "gap:.5rem");
+            __b.OpenComponent<MudIcon>(j++); __b.AddAttribute(j++, "Icon", icon); __b.AddAttribute(j++, "Size", Size.Small); __b.CloseComponent();
+            __b.OpenComponent<MudText>(j++); __b.AddAttribute(j++, "Typo", Typo.body2); __b.AddContent(j++, key); __b.CloseComponent();
+            __b.CloseElement();
+            __b.OpenComponent<MudText>(j++); __b.AddAttribute(j++, "Typo", Typo.body2); __b.AddAttribute(j++, "Class", "fw-semibold"); __b.AddContent(j++, value); __b.CloseComponent();
+            __b.CloseElement();
+        }));
+        __builder.CloseComponent();
+    };
+
+    private void ReloadFakeData()
+    {
+        SeedFake(ip);
+        Snackbar.Add("داده‌های نمونه بروزرسانی شد.", Severity.Info);
+        StateHasChanged();
+    }
+
+    private void SeedFake(string deviceIp)
+    {
+        var rnd = new Random(deviceIp?.GetHashCode() ?? Environment.TickCount);
+
+        _device = new DeviceHeader
+        {
+            DisplayName = $"ATM-{(deviceIp ?? "0.0.0.0").Replace(".", "-")}",
+            Branch = "شعبه مرکزی",
+            SerialNo = $"SN-{rnd.Next(100000, 999999)}",
+            OperatorName = "کاربر ارشد",
+            LastSeen = DateTime.Now.AddMinutes(-rnd.Next(1, 30)),
+            LastPingMs = rnd.Next(20, 120),
+            TotalRamGb = 3.9,
+            CpuModel = "Intel(R) Core(TM) i5-4570"
+        };
+
+        // مصرف فعلی (٪)
+
+
+
+
+
+    }
+
+    private Color GetXfsColor(HealthStatus status) => status switch
+    {
+        HealthStatus.Online => Color.Primary,
+        HealthStatus.PowerOff => Color.Error,
+        HealthStatus.Offline => Color.Dark,
+        HealthStatus.HardwareError => Color.Error,
+        HealthStatus.DeviceNotFound => Color.Error,
+        HealthStatus.UserError => Color.Error,
+        HealthStatus.Busy => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color GetCassetteColor(string status) => status switch
+    {
+        "OK" => Color.Primary,
+        "Low" => Color.Warning,
+        "Empty" => Color.Error,
+        _ => Color.Default
+    };
+
+    private async Task ResetModule(XfsModule m)
+    {
+        if (IsResetting(m)) return;           
+        _resetting.Add(m.ModuleId);
+        StateHasChanged();
+        try
+        {
+            bool ok = false;
+
+         await   Task.Delay(3000);
+            if (m.Name == Dispenser)
+                ok = await service.RequestResetCdmAsync(ip);
+            else if (m.Name == IDC)
+                ok = await service.RequestResetIdcAsync(ip);
+            else if (m.Name == Ptr)
+                ok = await service.RequestResetPtrAsync(ip);
+
+            if (ok)
+                Snackbar.Add($"{m.Name} ریست شد.", Severity.Success);
+            else
+                Snackbar.Add($"{m.Name} ریست نشد.", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"ریست {m.Name} با خطا مواجه شد: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _resetting.Remove(m.ModuleId);
+            StateHasChanged();
+        }
+    }
+
+    private void RecalibrateCassette(Cassette c)
+    {
+        c.Status = c.FillPercent < 15 ? "Empty" : (c.FillPercent < 35 ? "Low" : "OK");
+        Snackbar.Add($"{c.Name} کالیبره شد.", Severity.Info);
+        StateHasChanged();
+    }
+
+    private void TakeScreenshot()
+    {
+        Snackbar.Add("اسکرین‌شات در صف اجرا قرار گرفت.", Severity.Normal);
+    }
+    private async Task GetInfo(Guid ModulId,string  Name)
+    {
+        if (Name == ModuleCreationHelper.Dispenser){
+            var parameters = new DialogParameters
+        {
+            { "ModuleId", /* Guid ماژول */ ModulId }
+        };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            Dialog.Show<CdmModuleDialog>("وضعیت ماژول CDM", parameters, options);}
+        else if(Name == ModuleCreationHelper.IDC)
+        {
+            var parameters = new DialogParameters
+        {
+            { "ModuleId", /* Guid ماژول */ ModulId }
+        };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            Dialog.Show<IdcModuleDialog>("وضعیت ماژول کارت خوان", parameters, options);
+        }
+        else if (Name == ModuleCreationHelper.Pin)
+        {
+            var parameters = new DialogParameters
+        {
+            { "ModuleId", /* Guid ماژول */ ModulId }
+        };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            Dialog.Show<PinModuleDialog>("وضعیت ماژول پین پد", parameters, options);
+        }
+        else if (Name == ModuleCreationHelper.Ptr)
+        {
+            var parameters = new DialogParameters
+        {
+            { "ModuleId", /* Guid ماژول */ ModulId }
+        };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            Dialog.Show<PtrModuleDialog>("وضعیت ماژول پرینتر", parameters, options);
+        }
+        else if (Name == ModuleCreationHelper.Cam)
+        {
+            var parameters = new DialogParameters
+        {
+            { "ModuleId", /* Guid ماژول */ ModulId }
+        };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            Dialog.Show<CameraModuleDialog>("وضعیت ماژول دوربین", parameters, options);
+        }
+        else if (Name == ModuleCreationHelper.Sensors)
+        {
+            var parameters = new DialogParameters
+        {
+            { "ModuleId", /* Guid ماژول */ ModulId }
+        };
+            var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+            Dialog.Show<SiuModuleDialog>("وضعیت ماژول دوربین", parameters, options);
+        }
+    }
+
+ 
+}

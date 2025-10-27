@@ -1,0 +1,164 @@
+﻿.carousel-3d {
+    height: 360px;
+}
+
+    .carousel-3d .mud-carousel-item {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        padding: 12px;
+    }
+
+/* 🌟 کارت سه‌بعدی شیک (گِلس + گرادیانت نرم) */
+.card-3d {
+    width: min(820px, 92vw);
+    border-radius: 20px;
+    padding: 22px;
+    backdrop-filter: blur(6px);
+    background: radial-gradient(1200px 400px at 100% -10%, rgba(0,200,255,.10), transparent 40%), radial-gradient(1000px 500px at -20% 120%, rgba(0,255,160,.10), transparent 45%), linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,.50));
+    border: 1px solid rgba(255,255,255,.35);
+    box-shadow: 0 10px 18px rgba(0,0,0,.10), 0 28px 60px rgba(0,0,0,.18);
+    /* 3D */
+    transform-style: preserve-3d;
+    transition: transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .4s ease, background .4s ease;
+    will-change: transform;
+}
+
+    .card-3d:hover {
+        transform: rotateY(-4deg) rotateX(1deg) translateZ(6px);
+        box-shadow: 0 12px 24px rgba(0,0,0,.12), 0 40px 90px rgba(0,0,0,.22);
+    }
+
+/* تیتر کارت */
+.card-head {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: 12px;
+}
+
+/* محتوای کارت: دو ستونه، موبایل تک‌ستونه */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 14px 18px;
+}
+
+@media (max-width: 900px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* هر ردیف اطلاعات: آیکن + متون */
+.info-item {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    align-items: start;
+    gap: 10px;
+}
+
+.info-label {
+    font-size: .85rem;
+    opacity: .75;
+    line-height: 1.2;
+}
+
+.info-value {
+    font-weight: 600;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+/* آدرس پهنای کامل */
+.span-2 {
+    grid-column: 1 / -1;
+}
+
+/* انیمیشن ورود نرم برای هر اسلاید */
+.slide-fade {
+    animation: slideIn .55s ease both;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(.99);
+    }
+  
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    }
+
+    .mini-wrap {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 12px;
+        height: 100%;
+    }
+.mini {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 12px;
+        height: 100%;
+        color: var(--mud-palette-text-primary);
+    }
+
+
+
+{
+    grid-template-columns: repeat(2,minmax(0,1fr));
+}
+
+}
+
+@media (max-width: 600px) {
+    .mini-wrap {
+        grid-template-columns: 1fr;
+    }
+}
+
+.gauge-wrap {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 12px;
+}
+
+@media (max-width: 900px) {
+    .gauge-wrap {
+        grid-template-columns: 1fr;
+    }
+}
+
+.gauge-card {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    padding: .9rem;
+    border-radius: 16px;
+}
+
+.gauge-ring {
+    position: relative;
+    width: 76px;
+    height: 76px;
+    display: grid;
+    place-items: center;
+}
+
+.gauge-value {
+    position: absolute;
+    font-weight: 700;
+    font-size: .95rem;
+}
+
+.k-label {
+    line-height: 1.2;
+}
+

@@ -1,0 +1,407 @@
+﻿@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Modules
+@using NaraEyes.Application.Contracts.Models.Modules.CDM
+@using NaraEyes.Application.Contracts.Models.Modules.Cam
+@using NaraEyes.Application.Contracts.Models.Modules.Idc
+@using NaraEyes.Application.Contracts.Models.Modules.Ptr
+@using NaraEyes.Application.Contracts.Models.Modules.SIU
+@inject IModuleServices ModuleServices
+@inject ISnackbar Snackbar
+<style>
+    /* لایهٔ افقیِ بدون‌وَرَپ: همیشه کنار هم */
+    .chart-wrap {
+        display: flex;
+        flex-wrap: nowrap; /* نذار بره خط بعد */
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    /* ستون چارت: کشسان با حداقل عرض صفر (برای جلوگیری از سرریز) */
+    .chart-main {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    /* ستون جزئیات: پهنای ثابت و چسبان */
+    .chart-side {
+        flex: 0 0 320px; /* پهنای ثابت: 320px */
+        max-width: 320px;
+        position: sticky;
+        top: 16px;
+    }
+
+    /* اسکرول کنترل‌شده هم‌قدِ چارت */
+    .status-scroll {
+        max-height: 320px;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+    /* هر ردیف: زمان + چیپ در یک خط */
+    .status-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        margin-bottom: 6px;
+        white-space: nowrap; /* متن نشکنه */
+    }
+
+        /* زمان: پهنای ثابت و وسط‌چین */
+        .status-row .time {
+            display: inline-block;
+            min-width: 56px; /* مناسب HH:mm */
+            text-align: center;
+            font-size: .875rem;
+            color: var(--mud-palette-text-secondary);
+        }
+
+    /* چیپ فشرده و تک‌خط */
+    .status-chip {
+        white-space: nowrap;
+        height: 28px; /* Dense */
+        padding: 0 8px;
+        font-size: .85rem;
+    }
+
+    /* در صورت خیلی کمبود عرض (موبایل)، اجازه بده ریسپانسیو ستون‌ها زیر هم برن */
+    @@media (max-width: 720px) {
+        .chart-wrap {
+            flex-direction: column;
+        }
+
+        .chart-side {
+            position: static;
+            max-width: none;
+            flex: 0 0 auto;
+        }
+    }
+</style>
+
+<MudDialog MaxWidth="MaxWidth.Large" FullWidth="true" Class="p-0" dir="rtl">
+    <DialogContent>
+        @if (_loading)
+        {
+            <div class="p-6">
+                <MudSkeleton Animation="Animation.Pulse" SkeletonType="SkeletonType.Rectangle" Height="28px" Class="mb-4" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="180px" Class="mb-4" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" />
+            </div>
+        }
+        else if (_vm is null)
+        {
+            <div class="p-6">
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Elevation="0">
+                    اطلاعاتی برای این ماژول یافت نشد.
+                </MudAlert>
+            </div>
+        }
+        else
+        {
+            <MudTabs Rounded="true" Elevation="0">
+                <!-- تب اطلاعات -->
+                <MudTabPanel Text="اطلاعات وضعیت" Icon="@Icons.Material.Filled.Info" DisableRipple="true">
+                    <div class="p-5">
+                    <MudStack Spacing="2" Class="siu-wrap">
+
+                            <!-- وضعیت کلی ماژول -->
+                            <MudPaper Class="pa-4 rounded-xl">
+                                <MudText Typo="Typo.h6">وضعیت ماژول</MudText>
+                                <MudDivider Class="my-2" />
+                                <MudText>@_vm.DeviceStatusFa</MudText>
+                            </MudPaper>
+
+                            <!-- درها -->
+                            @Section("درها", _vm.Doors)
+
+                            <!-- واحدهای کمکی (Auxiliaries) -->
+                            @Section("واحدهای کمکی", _vm.Auxiliaries)
+
+                            <!-- نماگرها (Indicators) -->
+                            @Section("نماگرها", _vm.Indicators)
+
+                            <!-- چراغ‌های راهنما (Guid Lights) -->
+                            @Section("چراغ‌های راهنما", _vm.GuidLights)
+
+                        </MudStack>
+
+
+
+                        <MudDivider Class="my-4" />
+
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" />
+                            <MudText Typo="Typo.body2">آخرین به‌روزرسانی:</MudText>
+                            <MudText Typo="Typo.body2" Class="font-medium">@(_vm.LastUpdate ?? "-")</MudText>
+                        </MudStack>
+
+                        <!-- لگند وضعیت‌ها -->
+                        <MudPaper Class="mt-4 p-3 rounded-2xl shadow-sm">
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">راهنمای وضعیت</MudText>
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                @foreach (var lg in _legend)
+                                {
+                                    <MudChip T="string"
+                                             Value="@lg.Text"
+                                             Color="@lg.Color"
+                                             Variant="Variant.Filled"
+                                             Class="mb-1"
+                                             Icon="@lg.Icon">
+                                        @lg.Text
+                                    </MudChip>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    </div>
+                </MudTabPanel>
+
+                <MudTabPanel Text="نمودار وضعیت" Icon="@Icons.Material.Filled.MonitorHeart" DisableRipple="true">
+                    <div class="p-5">
+                        @if (trendSeries.Count > 0 && dayLabels.Length > 0)
+                        {
+                            <div class="chart-wrap">
+                                <!-- چارت (کشسان) -->
+                                <MudPaper Class="chart-main p-4 rounded-2xl shadow-sm">
+                                    <MudStack Spacing="1">
+                                        <MudText Typo="Typo.subtitle2" Class="mb-1">تایم‌لاین وضعیت (آخرین نقاط)</MudText>
+                                        <MudChart ChartType="ChartType.Line"
+                                                  ChartSeries="@trendSeries"
+                                                  XAxisLabels="@dayLabels"
+                                                  ChartOptions="@trendOptions"
+                                                  Style="height:320px" />
+                                        <MudText Typo="Typo.caption" Class="text-secondary mt-1">
+                                            ۰=آنلاین، ۱=آفلاین، ۲=خاموش، ۳=یافت‌نشد، ۴=سخت‌افزار، ۵=کاربری، ۶=مشغول، ۷=تقلب، ۸=احتمال تقلب
+                                        </MudText>
+                                    </MudStack>
+                                </MudPaper>
+
+                                <!-- جزئیات (پهلوی چارت، پهنای ثابت، sticky) -->
+                                <MudPaper Class="chart-side p-4 rounded-2xl shadow-sm">
+                                    <MudStack Spacing="1">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                            <MudText Typo="Typo.subtitle2">جزئیات نقاط</MudText>
+                                            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Default" Dense="true">
+                                                @((_vm?.status?.Length ?? 0)) نقطه
+                                            </MudChip>
+                                        </MudStack>
+
+                                        <MudDivider Class="my-2" />
+
+                                        <div class="status-scroll">
+                                            @for (int i = 0; i < dayLabels.Length && i < (_vm?.status?.Length ?? 0); i++)
+                                            {
+                                                var label = dayLabels[i];
+                                                var code = _vm!.status![i];
+                                                var text = MapDeviceStatusToPersian((ushort)code);
+                                                var color = ColorForStatusCode(code);
+                                                var icon = IconForStatusCode(code);
+
+                                                <div class="status-row">
+                                                    <span class="time">@label</span>
+                                                    <MudChip T="string"
+                                                             Value="@text"
+                                                             Color="@color"
+                                                             Variant="Variant.Outlined"
+                                                             Dense="true"
+                                                             StartIcon="@icon"
+                                                             Class="status-chip">
+                                                        @text
+                                                    </MudChip>
+                                                </div>
+                                            }
+                                        </div>
+                                    </MudStack>
+                                </MudPaper>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                داده‌ای برای نمودار موجود نیست.
+                            </MudAlert>
+                        }
+                    </div>
+                </MudTabPanel>
+
+
+
+
+            </MudTabs>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="Close">بستن</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public Guid ModuleId { get; set; }
+
+    private SiuModuleViewModel? _vm;
+    private bool _loading = true;
+    private MudChart? _chart;
+
+    // --- فیلدهای مربوط به چارت (جدید) ---
+    private List<ChartSeries> trendSeries = new();
+    private string[] dayLabels = Array.Empty<string>();
+    private ChartOptions trendOptions = new();
+                   
+                        // سکشن عمومی برای هر گروه از آیتم‌ها
+                        RenderFragment Section(string title, IEnumerable<ItemFa> items) => __builder =>
+                        {
+                            <MudPaper Class="pa-4 rounded-xl">
+                                <MudText Typo="Typo.h6">@title</MudText>
+                                <MudDivider Class="my-2" />
+                                <MudGrid Class="gap-3">
+                @foreach (var it in (items ?? Enumerable.Empty<ItemFa>())
+                                            .Where(x => x is not null)
+                                            .Take(4))
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <div class="mini-card">
+                            @CardFor(it.TitleFa, it.ValueFa)
+                        </div>
+                    </MudItem>
+                }
+                                </MudGrid>
+                            </MudPaper>
+                        ;
+                        };
+                    
+
+    // نگاشت رنگ/آیکن بر اساس متن وضعیت
+    private (Color Color, string Icon) ColorIconFor(string? statusText)
+    {
+        var s = (statusText ?? "").Trim();
+
+        return s switch
+        {
+            // ok
+            "آنلاین" or "آماده" or "خالی" or "بسته" => (Color.Success, Icons.Material.Filled.CheckCircle),
+
+            // warnings
+            "خطای کاربری" or "باز" or "انباشته" => (Color.Warning, Icons.Material.Filled.Warning),
+
+            // busy
+            "مشغول / در حال پردازش" => (Color.Info, Icons.Material.Filled.Autorenew),
+
+            // errors
+            "آفلاین" or "خاموش / بدون برق" or "دستگاه یافت نشد" or "خطای سخت‌افزاری" =>
+                (Color.Error, Icons.Material.Filled.Report),
+
+            // fraud
+            "تلاش برای تقلب" or "احتمال تقلب / نیاز به بررسی" =>
+                (Color.Error, Icons.Material.Filled.Security),
+
+            _ => (Color.Default, Icons.Material.Filled.Help)
+        };
+    }
+
+    private RenderFragment CardFor(string title, string? status) => __builder =>
+    {
+        var (color, icon) = ColorIconFor(status);
+
+        <MudCard Class="w-[280px] rounded-2xl shadow-sm hover:shadow-md transition-all">
+            <MudCardContent Class="p-4">
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Secondary" Size="Size.Medium" />
+                        <MudText Typo="Typo.subtitle2">@title</MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.h6" Class="font-bold">@(!string.IsNullOrWhiteSpace(status) ? status : "-")</MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+        ;
+    };
+    private static string MapDeviceStatusToPersian(ushort status) => status switch
+    {
+        0 => "آنلاین",
+        1 => "آفلاین",
+        2 => "خاموش / بدون برق",
+        3 => "دستگاه یافت نشد",
+        4 => "خطای سخت‌افزاری",
+        5 => "خطای کاربری",
+        6 => "مشغول / در حال پردازش",
+        7 => "تلاش برای تقلب",
+        8 => "احتمال تقلب / نیاز به بررسی",
+        _ => $"وضعیت ناشناخته ({status})"
+    };
+    private readonly (string Text, Color Color, string Icon)[] _legend = new[]
+    {
+        ("آنلاین", Color.Success, Icons.Material.Filled.CheckCircle),
+        ("آفلاین", Color.Error, Icons.Material.Filled.Report),
+        ("خاموش / بدون برق", Color.Error, Icons.Material.Filled.PowerOff),
+        ("دستگاه یافت نشد", Color.Error, Icons.Material.Filled.PortableWifiOff),
+        ("خطای سخت‌افزاری", Color.Error, Icons.Material.Filled.BugReport),
+        ("خطای کاربری", Color.Warning, Icons.Material.Filled.SupportAgent),
+        ("مشغول / در حال پردازش", Color.Info, Icons.Material.Filled.Autorenew),
+        ("تلاش برای تقلب", Color.Error, Icons.Material.Filled.Security),
+        ("احتمال تقلب / نیاز به بررسی", Color.Warning, Icons.Material.Filled.Security),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _vm = await ModuleServices.GetSiuInfo(ModuleId, CancellationToken.None);
+
+            // سازگاری نام خاصیت Labels (اگر تو مدل‌ت هنوز Lables است)
+            if (_vm?.Lables is null && _vm?.Lables is not null)
+                _vm.Lables = _vm.Lables;
+
+            // اگر Labels خالی بود، از زمان‌ها برچسب بساز
+            if (_vm?.Lables is null && _vm?.Times is not null)
+                _vm!.Lables = _vm.Times.Select(t => t.ToString("HH:mm")).ToArray();
+
+            // --- آماده‌سازی داده‌های چارت با الگوی صحیح ---
+            var labels = _vm?.Lables;
+            var data = _vm?.status?.Select(s => (double)s).ToArray();
+
+            if (labels is not null && data is not null && labels.Length == data.Length && data.Length > 0)
+            {
+                dayLabels = labels;
+                trendSeries = new()
+                {
+                    new ChartSeries
+                    {
+                        Name = "Status",
+                        Data = data
+                    }
+                };
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("خطا در دریافت اطلاعات ماژول.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string[] FallbackLabels()
+        => _vm?.Times?.Select(t => t.ToString("HH:mm")).ToArray() ?? Array.Empty<string>();
+
+    private void Close() => MudDialog.Cancel();
+    private static Color ColorForStatusCode(int code) => code switch
+    {
+        0 => Color.Success,
+        6 => Color.Info,
+        5 or 8 => Color.Warning,
+        1 or 2 or 3 or 4 or 7 => Color.Error,
+        _ => Color.Primary
+    };
+
+    private static string IconForStatusCode(int code) => code switch
+    {
+        0 => Icons.Material.Filled.CheckCircle,
+        6 => Icons.Material.Filled.Autorenew,
+        5 or 8 => Icons.Material.Filled.Warning,
+        1 or 2 or 3 or 4 or 7 => Icons.Material.Filled.Report,
+        _ => Icons.Material.Filled.CheckCircle
+    };
+}

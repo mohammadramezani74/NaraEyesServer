@@ -1,0 +1,33 @@
+﻿@using MudBlazor
+@using Microsoft.AspNetCore.Components.Forms
+@using NaraEyes.Application.Contracts.Models.Basic
+@* @rendermode InteractiveServer  ← معمولاً لازم نیست داخل کامپوننت دیالوگ *@
+
+<MudDialog>
+    <DialogContent>
+    
+            <MudTextField @bind-Value="Model.ShortName" Label="نام نمایشی" For="@(() => Model.ShortName)" Required="true" />
+            <MudTextField @bind-Value="Model.Name" Label="نام" For="@(() => Model.Name)" Required="true" />
+            <MudNumericField T="int" @bind-Value="Model.Code" Label="کد سرپرستی" For="@(() => Model.Code)" Required="true" Min="1" />
+
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">ثبت</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; } 
+    [Parameter] public CreateSupervisionStateViewModel Model { get; set; } = new();
+
+
+    private async Task Save()
+    {
+  
+        MudDialog.Close(DialogResult.Ok(Model));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

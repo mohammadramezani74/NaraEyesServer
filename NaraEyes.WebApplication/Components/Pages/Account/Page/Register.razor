@@ -1,0 +1,104 @@
+﻿@page "/account/register"
+
+@using System.ComponentModel.DataAnnotations
+@using NaraEyes.Domain.Entities.Identity
+
+@* @rendermode InteractiveServer
+ *@
+
+@inject UserManager<User> UserManager
+@inject SignInManager<User> SignInManager
+@inject NavigationManager NavigationManager
+
+<h3>ثبت‌نام</h3>
+
+<EditForm Model="registerModel" OnValidSubmit="HandleRegister" FormName="frmRegister" Enhance="true">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="mb-3">
+        <label for="name">نام</label>
+        <InputText id="name" class="form-control" @bind-Value="registerModel.Name" />
+    </div>
+    <div class="mb-3">
+        <label for="LName">نام خانوادگی</label>
+        <InputText id="LName" class="form-control" @bind-Value="registerModel.LName" />
+    </div>
+
+    <div class="mb-3">
+        <label for="UserName">نام کاربری</label>
+        <InputText id="UserName" class="form-control" @bind-Value="registerModel.UserName" />
+    </div>
+
+    <div class="mb-3">
+        <label for="password">رمز عبور</label>
+        <InputText id="password" class="form-control" @bind-Value="registerModel.Password" type="password" />
+    </div>
+
+    <div class="mb-3">
+        <label for="confirmPassword">تأیید رمز عبور</label>
+        <InputText id="confirmPassword" class="form-control" @bind-Value="registerModel.ConfirmPassword" type="password" />
+    </div>
+
+    <button class="btn btn-primary" type="submit">ثبت‌نام</button>
+</EditForm>
+
+<p class="text-danger">@errorMessage</p>
+
+@code {
+
+    [SupplyParameterFromForm]
+    private RegisterModel registerModel { get; set; } = new();
+
+
+    private string errorMessage = string.Empty;
+
+    private async Task HandleRegister()
+    {
+        if (registerModel.Password != registerModel.ConfirmPassword)
+        {
+            errorMessage = "رمز عبور و تأیید آن یکسان نیست.";
+            return;
+        }
+
+
+        var user = new User
+            {
+                UserName = registerModel.UserName,
+                Email = "sample@yahoo.com",
+            };
+
+        user.SetName(registerModel.Name, registerModel.LName);
+
+        var result= await UserManager.CreateAsync(user, registerModel.Password);
+
+        if(result.Succeeded)
+        {
+            await  SignInManager.SignInAsync(user, isPersistent: false);
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+           errorMessage= string.Join("\n", result.Errors.Select(e => e.Description));
+        }
+    }
+
+    private class RegisterModel
+    {
+        [Required(ErrorMessage = "وارد کردن نام الزامی است")]
+        public string Name { get; set; } = string.Empty;
+        [Required(ErrorMessage = "وارد کردن نام خانوادگی الزامی است")]
+        public string LName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "وارد کردن نام کاربری الزامی است")]
+        public string UserName { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "وارد کردن رمز عبور الزامی است")]
+        [StringLength(100, MinimumLength = 6, ErrorMessage = "رمز عبور باید حداقل ۶ کاراکتر باشد")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "لطفاً رمز عبور را تأیید کنید")]
+        [Compare("Password", ErrorMessage = "رمز عبور و تأیید آن یکسان نیست")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

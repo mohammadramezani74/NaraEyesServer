@@ -1,0 +1,448 @@
+﻿@page "/management"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.WebApplication.Components.Dialogs
+@using NaraEyes.WebApplication.Components.Pages.Administration
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+@inject AuthenticationStateProvider Auth
+@inject IDialogService Dialog
+@inject ISnackbar Snackbar
+@inject ISupervisionStateService SupervisionStateService
+
+<MudContainer MaxWidth="MaxWidth.False" Class="p-6">
+
+    <!-- Header -->
+    <MudPaper Class="p-4 rounded-2xl d-flex justify-space-between align-center">
+        <div>
+            <MudText Typo="Typo.h5">مرکز مدیریت (Admin Hub)</MudText>
+            <MudText Typo="Typo.caption" Class="text-secondary">مدیریت سرپرستی‌ها، شعب، کاربران، نقش‌ها و دستگاه‌ها</MudText>
+        </div>
+        <div>
+            <MudText Typo="Typo.caption" Class="text-secondary">سلام، @userName 👋</MudText>
+        </div>
+    </MudPaper>
+
+    <MudTabs Class="mt-3 rounded-2xl" @bind-ActivePanelIndex="_activeIndex" >
+
+        <!-- Supervisories -->
+        <MudTabPanel Icon="@Icons.Material.Filled.Domain" Text="سرپرستی‌ها">
+            <MudPaper Class="p-3 rounded-2xl mt-2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
+                    <MudTextField T="string" @bind-Value="searchSupervisory" Placeholder="جستجو (کد/نام)"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Class="w-64" Immediate="true" />
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadSupervisions">رفرش</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddSupervisor">افزودن</MudButton>
+                    </MudStack>
+                </MudStack>
+
+                <MudTable Items="supervisionStates"
+                          Filter="SupervisorFilter"
+                          Dense="true" Hover="true" Bordered="true"
+                          CanCancelEdit="true"
+                          EditTrigger="TableEditTrigger.EditButton"
+                          EditButtonPosition="TableEditButtonPosition.End"
+                          ApplyButtonPosition="TableApplyButtonPosition.End"
+                          RowEditPreview="BackupSupervisor"
+                          RowEditCancel="CancelSupervisorEdit"
+                          RowEditCommit="CommitSupervisorEdit">
+
+                    <ColGroup>
+                        <col style="width: 160px;" />
+                        <col style="width: 40%;" />
+                        <col style="width: 120px;" />
+                    </ColGroup>
+
+                    <HeaderContent>
+                        <MudTh>کُد</MudTh>
+                        <MudTh>نام نمایشی</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+
+                    <!-- نمایش: فقط Code و ShortName -->
+                    <RowTemplate>
+                        <MudTd DataLabel="کُد">@context.Code</MudTd>
+                        <MudTd DataLabel="نام نمایشی">@context.ShortName</MudTd>
+                        <MudTd Class="text-end">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => DeleteSupervisor(context))" />
+                        </MudTd>
+                    </RowTemplate>
+
+                    <!-- ویرایش: سه فیلد -->
+                    <RowEditingTemplate>
+                        <MudTd DataLabel="کُد">
+                            <MudTextField T="int" @bind-Value="context.Code" Required />
+                        </MudTd>
+                        <MudTd DataLabel="نام">
+                            <MudTextField T="string" Label="نام" @bind-Value="context.Name" Required />
+                        </MudTd>
+                        <MudTd DataLabel="  نام نمایشی">
+                            <MudTextField T="string" Label="نام نمایشی" @bind-Value="context.ShortName" Required />
+                        </MudTd>
+                   
+                        <MudTd></MudTd>
+                    </RowEditingTemplate>
+
+                    <EditButtonContent Context="button">
+                        <MudIconButton Size="Size.Small" Icon="@Icons.Material.Outlined.Edit" Class="pa-0"
+                                       OnClick="@button.ButtonAction" Disabled="@button.ButtonDisabled" />
+                    </EditButtonContent>
+
+                    <PagerContent>
+                        <MudTablePager />
+                    </PagerContent>
+                </MudTable>
+            </MudPaper>
+        </MudTabPanel>
+
+    <!-- Branches -->
+    <MudTabPanel Icon="@Icons.Material.Filled.Store" Text="شعب">
+        @if (_loaded.Branches)
+        {
+            <BranchesTab  />
+        }
+        else
+        {
+            <MudSkeleton Height="220px" Animation="Animation.Pulse" />
+        }
+    </MudTabPanel>
+
+    <!-- Users -->
+    <MudTabPanel Icon="@Icons.Material.Filled.People" Text="کاربران">
+        @if (_loaded.Users)
+        {
+            <UsersTab />
+        }
+        else
+        {
+            <MudSkeleton Height="220px" Animation="Animation.Pulse" />
+        }
+    </MudTabPanel>
+
+    <!-- Roles -->
+    <MudTabPanel Icon="@Icons.Material.Filled.VerifiedUser" Text="نقش‌ها">
+        @if (_loaded.Roles)
+        {
+            <RolesTab />
+        }
+        else
+        {
+            <MudSkeleton Height="220px" Animation="Animation.Pulse" />
+        }
+    </MudTabPanel>
+
+    <!-- Devices -->
+    <MudTabPanel Icon="@Icons.Material.Filled.Devices" Text="دستگاه‌ها">
+        @if (_loaded.Devices)
+        {
+            <DevicesTab />
+        }
+        else
+        {
+            <MudSkeleton Height="240px" Animation="Animation.Pulse" />
+        }
+    </MudTabPanel>
+
+
+
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private string userName = "کاربر";
+
+    private (bool Branches, bool Users, bool Roles, bool Devices) _loaded;
+    private int _tabIndex;
+    private int _activeIndex
+    {
+        get => _tabIndex;
+        set
+        {
+            if (_tabIndex == value) return;
+            _tabIndex = value;
+
+      
+            switch (value)
+            {
+                case 1: _loaded.Branches = true; break;
+                case 2: _loaded.Users = true; break;
+                case 3: _loaded.Roles = true; break;
+                case 4: _loaded.Devices = true; break;
+            }
+
+            StateHasChanged();
+        }
+    }
+    // --- search boxes per tab
+    private string searchSupervisory = "";
+    private string searchBranch = "";
+    private string searchUser = "";
+    private string searchRole = "";
+    private string searchDevice = "";
+
+    // --- Models (mutable)
+    private List<SupervisionStateViewModel> supervisionStates = new();
+    private SupervisionStateViewModel? backupSupervisoryVm;
+    public class Branch { public int Id { get; set; } public string Code { get; set; } = ""; public string Name { get; set; } = ""; public string City { get; set; } = ""; public string SupervisoryName { get; set; } = ""; }
+    public class UserRow { public int Id { get; set; } public string UserName { get; set; } = ""; public string FullName { get; set; } = ""; public string Roles { get; set; } = ""; public bool Active { get; set; } }
+    public class RoleRow { public int Id { get; set; } public string Name { get; set; } = ""; public string Description { get; set; } = ""; public int UserCount { get; set; } }
+    public class DeviceRow { public int Id { get; set; } public string Serial { get; set; } = ""; public string Name { get; set; } = ""; public string BranchName { get; set; } = ""; public string Status { get; set; } = ""; }
+
+
+
+    private Branch? backupBranch;
+    private UserRow? backupUser;
+    private RoleRow? backupRole;
+    private DeviceRow? backupDevice;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        userName = state.User?.Identity?.Name ?? "کاربر";
+        Snackbar.Configuration.PositionClass = Defaults.Classes.Position.BottomStart;
+        await LoadSupervisions();
+    }
+
+    // -------- Supervisory handlers
+    private async Task LoadSupervisions()
+    {
+        try
+        {
+            var list = await SupervisionStateService.GetSupervisionStates();
+            supervisionStates = list.ToList();
+            StateHasChanged();
+            Snackbar.Add("لیست سرپرستی‌ها به‌روزرسانی شد.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"خطا در دریافت لیست: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // فیلتر فقط روی Code/ShortName/Name (هرچند Name نمایش داده نمی‌شود)
+    private bool SupervisorFilter(SupervisionStateViewModel s) =>
+        string.IsNullOrWhiteSpace(searchSupervisory)
+        || s.Code.ToString().Contains(searchSupervisory, StringComparison.OrdinalIgnoreCase)
+        || (s.ShortName?.Contains(searchSupervisory, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (s.Name?.Contains(searchSupervisory, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    // پشتیبان برای Cancel
+    private void BackupSupervisor(object item)
+    {
+        var s = (SupervisionStateViewModel)item;
+        backupSupervisoryVm = new SupervisionStateViewModel
+        {
+            Id = s.Id,
+            Code = s.Code,
+            Name = s.Name,
+            ShortName = s.ShortName
+        };
+    }
+
+    private void CancelSupervisorEdit(object item)
+    {
+        if (backupSupervisoryVm is null) return;
+        var s = (SupervisionStateViewModel)item;
+        s.Code = backupSupervisoryVm.Code;
+        s.Name = backupSupervisoryVm.Name;
+        s.ShortName = backupSupervisoryVm.ShortName;
+        Snackbar.Add("ویرایش لغو شد.", Severity.Info);
+    }
+
+    private async void CommitSupervisorEdit(object item)
+    {
+        var s = (SupervisionStateViewModel)item;
+        try
+        {
+            var op = await SupervisionStateService.UpdateAsync(s);
+            if (op.IsSucceded)
+                Snackbar.Add("تغییرات سرپرستی ثبت شد.", Severity.Success);
+            else
+                Snackbar.Add(op.Message ?? "ذخیره‌سازی ناموفق.", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"خطا در ذخیره: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteSupervisor(SupervisionStateViewModel s)
+    {
+        var ok = await Dialog.ShowMessageBox("حذف سرپرستی", $"«{s.ShortName ?? s.Name}» حذف شود؟", yesText: "حذف", cancelText: "انصراف");
+        if (ok == true)
+        {
+            try
+            {
+                await SupervisionStateService.DeleteAsync(s.Id);
+                supervisionStates.Remove(s);
+                Snackbar.Add("حذف شد.", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"خطا در حذف: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // افزودن: دیالوگ با سه فیلد (Name/ShortName/Code)
+    private async Task AddSupervisor()
+    {
+        var parameters = new DialogParameters<AddSupervisionStateDialog>
+        {
+            { x => x.Model, new CreateSupervisionStateViewModel() }
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = Dialog.Show<AddSupervisionStateDialog>("افزودن سرپرستی", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is CreateSupervisionStateViewModel m)
+        {
+            try
+            {
+                var op = await SupervisionStateService.CreateAsync(m);
+                if (op.IsSucceded)
+                {
+                    await LoadSupervisions();
+                }
+                else
+                {
+                    Snackbar.Add(op.Message ?? "ثبت ناموفق.", Severity.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"خطا در افزودن: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    // -------- Branch handlers
+    private bool BranchFilter(Branch b)
+        => string.IsNullOrWhiteSpace(searchBranch)
+           || b.Name.Contains(searchBranch, StringComparison.OrdinalIgnoreCase)
+           || b.Code.Contains(searchBranch, StringComparison.OrdinalIgnoreCase)
+           || b.City.Contains(searchBranch, StringComparison.OrdinalIgnoreCase)
+           || b.SupervisoryName.Contains(searchBranch, StringComparison.OrdinalIgnoreCase);
+
+    private void BackupBranch(object item)
+    {
+        var b = (Branch)item;
+        backupBranch = new Branch { Id = b.Id, Code = b.Code, Name = b.Name, City = b.City, SupervisoryName = b.SupervisoryName };
+    }
+
+    private void CancelBranchEdit(object item)
+    {
+        if (backupBranch is null) return;
+        var b = (Branch)item;
+        b.Code = backupBranch.Code;
+        b.Name = backupBranch.Name;
+        b.City = backupBranch.City;
+        b.SupervisoryName = backupBranch.SupervisoryName;
+        Snackbar.Add("ویرایش لغو شد.", Severity.Info);
+    }
+
+    private void CommitBranchEdit(object item)
+    {
+        Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
+    }
+
+ 
+    // -------- Users
+    private bool UserFilter(UserRow u)
+        => string.IsNullOrWhiteSpace(searchUser)
+           || u.UserName.Contains(searchUser, StringComparison.OrdinalIgnoreCase)
+           || u.FullName.Contains(searchUser, StringComparison.OrdinalIgnoreCase)
+           || u.Roles.Contains(searchUser, StringComparison.OrdinalIgnoreCase);
+
+    private void BackupUser(object item)
+    {
+        var u = (UserRow)item;
+        backupUser = new UserRow { Id = u.Id, UserName = u.UserName, FullName = u.FullName, Roles = u.Roles, Active = u.Active };
+    }
+
+    private void CancelUserEdit(object item)
+    {
+        if (backupUser is null) return;
+        var u = (UserRow)item;
+        u.UserName = backupUser.UserName;
+        u.FullName = backupUser.FullName;
+        u.Roles = backupUser.Roles;
+        u.Active = backupUser.Active;
+        Snackbar.Add("ویرایش لغو شد.", Severity.Info);
+    }
+
+    private void CommitUserEdit(object item) => Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
+
+  
+
+    // -------- Roles
+    private bool RoleFilter(RoleRow r)
+        => string.IsNullOrWhiteSpace(searchRole)
+           || r.Name.Contains(searchRole, StringComparison.OrdinalIgnoreCase)
+           || r.Description.Contains(searchRole, StringComparison.OrdinalIgnoreCase);
+
+    private void BackupRole(object item)
+    {
+        var r = (RoleRow)item;
+        backupRole = new RoleRow { Id = r.Id, Name = r.Name, Description = r.Description, UserCount = r.UserCount };
+    }
+
+    private void CancelRoleEdit(object item)
+    {
+        if (backupRole is null) return;
+        var r = (RoleRow)item;
+        r.Name = backupRole.Name;
+        r.Description = backupRole.Description;
+        r.UserCount = backupRole.UserCount;
+        Snackbar.Add("ویرایش لغو شد.", Severity.Info);
+    }
+
+    private void CommitRoleEdit(object item) => Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
+
+
+
+    // -------- Devices
+    private bool DeviceFilter(DeviceRow d)
+        => string.IsNullOrWhiteSpace(searchDevice)
+           || d.Serial.Contains(searchDevice, StringComparison.OrdinalIgnoreCase)
+           || d.Name.Contains(searchDevice, StringComparison.OrdinalIgnoreCase)
+           || d.BranchName.Contains(searchDevice, StringComparison.OrdinalIgnoreCase)
+           || d.Status.Contains(searchDevice, StringComparison.OrdinalIgnoreCase);
+
+    private void BackupDevice(object item)
+    {
+        var d = (DeviceRow)item;
+        backupDevice = new DeviceRow { Id = d.Id, Serial = d.Serial, Name = d.Name, BranchName = d.BranchName, Status = d.Status };
+    }
+
+    private void CancelDeviceEdit(object item)
+    {
+        if (backupDevice is null) return;
+        var d = (DeviceRow)item;
+        d.Serial = backupDevice.Serial;
+        d.Name = backupDevice.Name;
+        d.BranchName = backupDevice.BranchName;
+        d.Status = backupDevice.Status;
+        Snackbar.Add("ویرایش لغو شد.", Severity.Info);
+    }
+
+    private void CommitDeviceEdit(object item) => Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
+
+  
+
+    private Color StatusColor(string status) =>
+        status switch
+        {
+            "InService" => Color.Success,
+            "Warning" => Color.Warning,
+            "Error" => Color.Error,
+            "Offline" => Color.Dark, // یا Color.Error
+            _ => Color.Info
+        };
+}
