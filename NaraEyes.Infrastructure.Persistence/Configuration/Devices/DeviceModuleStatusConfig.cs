@@ -26,7 +26,7 @@ namespace NaraEyes.Infrastructure.Persistence.Configuration.Devices
                    .IsRequired();
 
             builder.HasOne(x => x.Module)
-                   .WithMany() 
+                   .WithMany(x=>x.DeviceModuleStatuses) 
                    .HasForeignKey(x => x.DeviceModuleId)
                    .OnDelete(DeleteBehavior.Cascade);
 

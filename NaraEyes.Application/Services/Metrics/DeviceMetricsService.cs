@@ -169,6 +169,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unit0.TotalCount = cu.Init.ToString();
                                 unit0.CurrentCount = cu.Count.ToString();
+                                unit0.Denomination = cu.Denomination;
 
                             }
 
@@ -180,6 +181,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unit0.TotalCount = cu.Init.ToString();
                                 unit0.CurrentCount = cu.Count.ToString();
+                                unit0.Denomination = cu.Denomination;
 
                             }
 
@@ -191,6 +193,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unit0.TotalCount = cu.Init.ToString();
                                 unit0.CurrentCount = cu.Count.ToString();
+                                unit0.Denomination = cu.Denomination;
 
                             }
 
@@ -202,6 +205,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unit0.TotalCount = cu.Init.ToString();
                                 unit0.CurrentCount = cu.Count.ToString();
+                                unit0.Denomination = cu.Denomination;
 
                             }
 
@@ -213,6 +217,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unit0.TotalCount = cu.Init.ToString();
                                 unit0.CurrentCount = cu.Count.ToString();
+                                unit0.Denomination = cu.Denomination;
 
                             }
 

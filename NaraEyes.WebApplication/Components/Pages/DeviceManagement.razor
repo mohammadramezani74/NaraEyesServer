@@ -49,7 +49,7 @@
                 }
             }
         </MudSelect>
-
+     
         <!-- جستجو -->
         <MudTextField T="string"
                       Value="_search"
@@ -59,6 +59,19 @@
                       AdornmentIcon="@Icons.Material.Filled.Search"
                       IconSize="Size.Medium"
                       Class="mt-0 w-64" />
+        <MudSpacer></MudSpacer>
+        <MudTooltip Text="خروجی اکسل">
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    <MudIconButton OnClick="ExportDeviceExcel" Icon="@Icons.Custom.FileFormats.FileExcel"
+                                   Color="Color.Success"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Medium"
+                                   Class="ml-2" />
+                </ActivatorContent>
+               
+            </MudMenu>
+        </MudTooltip>
     </ToolBarContent>
 
     <HeaderContent>
@@ -154,6 +167,15 @@
       URL.revokeObjectURL(url);
       a.remove();
     };
+
+            window.downloadBase64File = (contentType, base64Data, fileName) => {
+      const a = document.createElement('a');
+      a.href = `data:${contentType};base64,${base64Data}`;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
 </script>
 
 <style>
@@ -188,12 +210,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-    
+
         _branches = await BranchService.GetAllBranches(CancellationToken.None);
         await Task.Delay(500);
         try
         {
-             DeviceService.CheckHeartBeat();
+            DeviceService.CheckHeartBeat();
 
 
             _hubConnection = new HubConnectionBuilder()
@@ -472,7 +494,7 @@
             await UploadFile(uploadResult.File, Ip);
 
         }
-        }
+    }
     private async Task UploadFile(IBrowserFile file, string Ip)
     {
         try
@@ -491,7 +513,7 @@
             {
                 contentType = "application/octet-stream";
             }
-         
+
             var result = await DeviceService.RequestUploadFileAsync(Ip, file);
             if (result)
             {
@@ -508,6 +530,28 @@
 
             Snackbar.Add("آپلود فایل با خطا مواجه شد لطفا مجدد تلاش فرمایید!", Severity.Error);
         }
+    }
+
+    private async Task ExportDeviceExcel()
+    {
+        var filter = new DeviceFilterViewModel
+        {
+            Search = _search,
+            Status = _status,
+            Branch = _branchId
+        };
+        var base64=   await DeviceService.ExportExcelAsync(filter);
+        if (string.IsNullOrWhiteSpace(base64))
+        {
+             Snackbar.Add("فایل تولید نشد.",Severity.Error);
+            return;
+        }
+
+        var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        var fileName = $"گزارش-دستگاه ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+        await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
     }
 
     

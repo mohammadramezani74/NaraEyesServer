@@ -90,7 +90,7 @@ namespace NaraEyes.Infrastructure.QueueImplemention
 
 
             var pc = new PersianCalendar();
-            var now = DateTime.Now;
+            var now = DateTime.Now.AddDays(-1);
             int y = pc.GetYear(now);
             int m = pc.GetMonth(now);
             int d = pc.GetDayOfMonth(now);

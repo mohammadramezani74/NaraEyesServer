@@ -13,7 +13,8 @@ namespace NaraEyes.Domain.Entities.Devices
         public Guid DeviceId { get; set; }
         public Device Device { get; set; }
         public DeviceModuleType Type { get; set; }
-        public string Name { get; set; } 
+        public string Name { get; set; }
+        public List<DeviceModuleStatus> DeviceModuleStatuses { get; set; } = new List<DeviceModuleStatus>();
         private DeviceModule() { }
 
         private DeviceModule(Guid deviceId, DeviceModuleType type, string name)

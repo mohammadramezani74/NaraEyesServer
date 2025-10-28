@@ -39,5 +39,6 @@ namespace NaraEyes.Application.Contracts.Interfaces.Devices
         Task<HomeChartsViewModel> GetVisualizeHome(string userName, CancellationToken ct = default);
         Task<List<BranchErrorAggDto>> GetTop10BranchesByErrorsAsync(CancellationToken ct = default);
         Task<int> CheckHeartBeat( CancellationToken cancellationToken = default);
+        Task<string> ExportExcelAsync(DeviceFilterViewModel filter,CancellationToken cancellation=default);
     }
 }

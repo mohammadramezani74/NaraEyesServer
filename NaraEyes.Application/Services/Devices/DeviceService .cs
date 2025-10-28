@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Components.Forms;
+﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Application.Abstraction.Unitofwork;
@@ -6,6 +7,8 @@ using NaraEyes.Application.Contracts.Interfaces.Devices;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Devices;
 using NaraEyes.Application.Contracts.Models.Metrics;
+using NaraEyes.Application.Contracts.Models.Modules.Cam;
+using NaraEyes.Application.Contracts.Models.Modules.CDM;
 using NaraEyes.Application.Contracts.Utilities;
 using NaraEyes.Domain.Entities.Base;
 using NaraEyes.Domain.Entities.Devices;
@@ -173,14 +176,13 @@ namespace NaraEyes.Application.Services.Devices
             
             var query = _uow.Devices
                 .AsNoTracking()
-                .Include(d => d.Branch)     // برای نام شعبه
+                .Include(d => d.Branch)    
                 .Include(d => d.CashUnits)
                 .OrderBy(x => x.Mode == DeviceMode.Error)
                 .ThenBy(x => x.Mode == DeviceMode.warning)
                 .AsQueryable();
             
 
-            // ----- فیلترها -----
             if (!string.IsNullOrWhiteSpace(filter.Search))
             {
                 var s = filter.Search.Trim();
@@ -637,6 +639,92 @@ usage=x.CurrentMetrics.CpuUsage??0,
                 .Take(10)
                 .ToListAsync(ct);
             return result;
+        }
+
+        public async Task<string> ExportExcelAsync(DeviceFilterViewModel filter, CancellationToken cts= default)
+        {
+            if(filter.Branch==null&&filter.Search==null&&filter.Status==null)
+            {
+                filter.Page = 1;
+                filter.PageSize = 3000;
+            }
+            var Devices = await GetAllDevicesAsync(filter);
+            List<DeviceViewModel>? items = Devices.Items;
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("گزارش  دستگاه‌ها");
+            int r = 1;
+            ws.Cell(r, 1).Value = "آی‌پی";
+            ws.Cell(r, 2).Value = "وضعیت";
+            ws.Cell(r, 3).Value = "نام دستگاه";
+            ws.Cell(r, 4).Value = "شعبه";
+            ws.Cell(r, 5).Value = "سریال";
+            ws.Cell(r, 6).Value = "موجودی";
+            ws.Cell(r, 7).Value = "بروزرسانی";
+
+            var header = ws.Range(r, 1, r, 6);
+            header.Style.Font.Bold = true;
+            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            header.Style.Fill.BackgroundColor = XLColor.LightGray;
+            header.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+            header.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+            header.Style.Border.LeftBorder = XLBorderStyleValues.Thin;
+            header.Style.Border.RightBorder = XLBorderStyleValues.Thin;
+
+            r++;
+            foreach (var i in items)
+            {
+                
+                ws.Cell(r, 1).Value = i.Ip;
+                ws.Cell(r, 2).Value = EnumHelper.GetEnumDisplayName(i.Status) ?? "";
+                ws.Cell(r, 2).Style.Fill.BackgroundColor = GetColor(i.Status);
+
+                ws.Cell(r, 3).Value = i.DisplayName;
+                ws.Cell(r, 4).Value = i.Branch;
+                ws.Cell(r, 5).Value = i.SerialNo;
+                ws.Cell(r, 6).Value = i.CashInventory;
+
+                ws.Cell(r, 7).Value = i.UpdatedAt.ToFarsiFull();
+
+
+
+                r++;
+            }
+
+            // زیباسازی و UX
+            var used = ws.RangeUsed();
+            used.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            used.Style.Font.FontName = "Tahoma"; // فونت رایج برای فارسی
+            ws.SheetView.FreezeRows(1);          // فریز هدر
+            used.SetAutoFilter();                 // فیلتر روی هدرها
+            ws.Columns().AdjustToContents();      // عرض مناسب ستون‌ها
+
+            // تبدیل به Base64 (بدون ذخیره‌ی فیزیکی)
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+            return Convert.ToBase64String(bytes);
+
+
+        }
+
+        private static XLColor GetColor(DeviceMode status)
+        {
+            switch (status)
+            {
+                case DeviceMode.InService:
+                    return XLColor.LightGreen;
+                   
+                case DeviceMode.Supervisor:
+                    return XLColor.LightBlue;
+                    
+                case DeviceMode.Offline:
+                    return XLColor.LightGray;
+                case DeviceMode.Error:
+                    return XLColor.LightPink;
+                case DeviceMode.warning:
+                    return XLColor.LightYellow;
+                default: return XLColor.White;
+            }
         }
     }
 
