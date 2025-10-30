@@ -1,0 +1,367 @@
+﻿@page "/report"
+@inject IReportService repService
+@inject ISnackbar snackbar
+@inject IJSRuntime JS
+@inject IDialogService DialogService
+@using MudBlazor
+@using System.Net.Http.Json
+@using System.Threading
+@using System.Globalization
+@using NaraEyes.Application.Contracts.Interfaces.Reports
+@using NaraEyes.Application.Contracts.Models.Reports
+@using NaraEyes.Application.Contracts.Utilities
+@using NaraEyes.WebApplication.Components.Dialogs
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    <MudSelect @bind-Value="selectedReport" Label="انتخاب گزارش" Dense="true" Variant="Variant.Outlined" Color="Color.Primary">
+        <MudSelectItem Value="1">گزارش فعالیت کاربران</MudSelectItem>
+        <MudSelectItem Value="2">گزارش آپلود فایل گروهی</MudSelectItem>
+        <MudSelectItem Value="3">گزارش راه اندازی مجدد دستگاه</MudSelectItem>
+    </MudSelect>
+
+
+    @if (selectedReport == 2 || selectedReport == 3)
+    {
+        <MudIconButton Color="Color.Primary" OnClick="FilterDate" Icon="@Icons.Material.Rounded.DateRange"></MudIconButton>
+    }
+
+    @if (selectedReport == 1)
+    {
+        <MudTable ServerData="ServerReloadUserActivity" Dense="true" Hover="true" Elevation="4" @ref="tableUserActivity">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">گزارش: فعالیت کاربران</MudText>
+                <MudSpacer />
+                <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="جستجو در نام" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-2" />
+                <MudIconButton OnClick="() => ExportToExcel(1)" Color="Color.Success"
+                               Variant="Variant.Filled"
+                               Size="Size.Medium"
+                               Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortLabel="username_field" T="UserActivityReport">نام</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="username_field" T="UserActivityReport">نام خانوادگی</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="lastLogin_field" T="UserActivityReport">آخرین ورود</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="lastCommand_field" T="UserActivityReport">آخرین دستور</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="lastCommandTime_field" T="UserActivityReport">زمان آخرین دستور</MudTableSortLabel></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="نام">@context.FirstName</MudTd>
+                <MudTd DataLabel="نام خانوادگی">@context.LastName</MudTd>
+                <MudTd DataLabel="آخرین ورود">@context.LastLoginDate</MudTd>
+                <MudTd DataLabel="آخرین دستور">@context.LastCommand</MudTd>
+                <MudTd DataLabel="زمان آخرین دستور">@context.LastCommandTime</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>دیتایی یافت نشد!</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>لطفا صبر کنید...</MudText>
+            </LoadingContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+
+    @if (selectedReport == 2)
+    {
+        <MudTable ServerData="ServerReloadFileUpload" Dense="true" Hover="true" Elevation="4" @ref="tableFileUpload">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">گزارش: آپلود فایل گروهی</MudText>
+                <MudSpacer />
+                <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="جستجو در نام فایل" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-2" />
+                <MudIconButton OnClick="() => ExportToExcel(2)" Color="Color.Success"
+                               Variant="Variant.Filled"
+                               Size="Size.Medium"
+                               Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
+            </ToolBarContent>
+            <HeaderContent>
+               <MudTh><MudTableSortLabel SortLabel="Ip_field" T="FileUploadReport">آیپی دستگاه</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="fileName_field" T="FileUploadReport">نام فایل</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="uploadDate_field" T="FileUploadReport">تاریخ آپلود</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="uploadedBy_field" T="FileUploadReport">آپلود شده توسط</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="uploadedBy_field" T="FileUploadReport">ذخیره شده در دستگاه</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="uploadedBy_field" T="FileUploadReport">زمان ذخیره در دستگاه</MudTableSortLabel></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                 <MudTd DataLabel="آیپی دستگاه">@context.Ip</MudTd>
+                <MudTd DataLabel="نام فایل">@context.FileName</MudTd>
+                <MudTd DataLabel="تاریخ آپلود">@context.UploadDate</MudTd>
+                <MudTd DataLabel="آپلود شده توسط">@context.UploadedBy</MudTd>
+                <MudTd DataLabel="ذخیره شده در دستگاه">@if (context.SaveFile)
+                    {
+                        <MudChip T="string" Color="Color.Success">موفق</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Error">شکست خورده</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="زمان ذخیره در دستگاه">@context.SaveTime</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>دیتایی یافت نشد!</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>لطفا صبر کنید...</MudText>
+            </LoadingContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+
+    @if (selectedReport == 3)
+    {
+        <MudTable ServerData="ServerReloadDeviceRestart" Dense="true" Hover="true" Elevation="4" @ref="tableDeviceRestart">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">گزارش: راه اندازی مجدد دستگاه</MudText>
+                <MudSpacer />
+                <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Placeholder="جستجو در شناسه دستگاه" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-2" />
+                <MudIconButton OnClick="() => ExportToExcel(3)" Color="Color.Success"
+                               Variant="Variant.Filled"
+                               Size="Size.Medium"
+                               Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortLabel="deviceId_field" T="DeviceRestartReport">آیپی دستگاه</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="restartTime_field" T="DeviceRestartReport">زمان راه‌اندازی مجدد</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="restartedBy_field" T="DeviceRestartReport">راه‌اندازی مجدد توسط</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="restartedBy_field" T="DeviceRestartReport">عملیات</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="restartedBy_field" T="DeviceRestartReport">زمان ریست دستگاه</MudTableSortLabel></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="شناسه دستگاه">@context.Ip</MudTd>
+                <MudTd DataLabel="زمان راه‌اندازی مجدد">@context.RestartTime</MudTd>
+                <MudTd DataLabel="راه‌اندازی مجدد توسط">@context.RestartedBy</MudTd>
+                <MudTd DataLabel="عملیات">
+                    @if (context.IsSuccess)
+                    {
+                        <MudChip T="string" Color="Color.Success">موفق</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Error">شکست خورده</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="راه‌اندازی مجدد توسط">@context.ResetAt</MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>دیتایی یافت نشد!</MudText>
+            </NoRecordsContent>
+            <LoadingContent>
+                <MudText>لطفا صبر کنید...</MudText>
+            </LoadingContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private MudTable<UserActivityReport> tableUserActivity;
+    private MudTable<FileUploadReport> tableFileUpload;
+    private MudTable<DeviceRestartReport> tableDeviceRestart;
+    public DateTime? StartDate { get; set; } = null;
+
+    private int selectedReport = 1; // Default report type
+    private string searchString = null;
+    private DateTime? EndDate = null;
+
+    // Simulated data for User Activity
+    private List<UserActivityReport> userActivityData = new List<UserActivityReport>();
+
+    // Simulated data for File Upload
+    private List<FileUploadReport> fileUploadData = new ();
+
+    // Simulated data for Device Restart
+    private List<DeviceRestartReport> deviceRestartData = new List<DeviceRestartReport>();
+
+    // Server reload method for UserActivity report
+    private async Task<TableData<UserActivityReport>> ServerReloadUserActivity(TableState state, CancellationToken token)
+    {
+        var filter = new ReportFilterModel
+        {
+            Search = searchString,
+
+            Page = state.Page + 1,              
+            PageSize = state.PageSize,
+            SortLabel = state.SortLabel,
+        };
+
+        var result = await repService.GetUserReports(filter, token);
+
+        return new TableData<UserActivityReport>
+        {
+            TotalItems = result.Total,
+            Items = result.Items
+        };
+    }
+
+    // Server reload method for FileUpload report
+    private async Task<TableData<FileUploadReport>> ServerReloadFileUpload(TableState state, CancellationToken token)
+    {
+        var filter = new ReportFilterModel
+        {
+            Search = searchString,
+            StartDate = StartDate,
+            EndDate=EndDate,
+
+            Page = state.Page + 1,
+            PageSize = state.PageSize,
+            SortLabel = state.SortLabel,
+        };
+        var result = await repService.GetFilesReports(filter, token);
+
+        return new TableData<FileUploadReport>
+        {
+            TotalItems = result.Total,
+            Items = result.Items
+        };
+    }
+
+    private async Task<TableData<DeviceRestartReport>> ServerReloadDeviceRestart(TableState state, CancellationToken token)
+    {
+        var filter = new ReportFilterModel
+        {
+            Search = searchString,
+            StartDate = StartDate,
+            EndDate = EndDate,
+
+            Page = state.Page + 1,
+            PageSize = state.PageSize,
+            SortLabel = state.SortLabel,
+        };
+        var result = await repService.GetRestartReports(filter, token);
+
+        return new TableData<DeviceRestartReport>
+        {
+            TotalItems = result.Total,
+            Items = result.Items
+        };
+    }
+
+    private void OnSearch(string text)
+    {
+        searchString = text;
+        // Force reload for the currently selected table
+        if (selectedReport == 1)
+        {
+            tableUserActivity.ReloadServerData();
+        }
+        else if (selectedReport == 2)
+        {
+            tableFileUpload.ReloadServerData();
+        }
+        else if (selectedReport == 3)
+        {
+            tableDeviceRestart.ReloadServerData();
+        }
+    }
+
+    private async Task ExportToExcel(int function)
+    {
+        if (function == 1)
+        {
+            var filter = new ReportFilterModel
+            {
+                Search = searchString
+            };
+            var base64 = await repService.UserReportsExcel(filter);
+            if (string.IsNullOrWhiteSpace(base64))
+            {
+                snackbar.Add("فایل تولید نشد.", Severity.Error);
+                return;
+            }
+
+            var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"گزارش-فعالیت کاربران-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+            await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+        }
+        else if(function==2){
+             var filter = new ReportFilterModel
+            {
+                Search = searchString,StartDate=StartDate,
+                EndDate=EndDate
+                
+            };
+            var base64 = await repService.FileUploadsExcel(filter);
+            if (string.IsNullOrWhiteSpace(base64))
+            {
+                snackbar.Add("فایل تولید نشد.", Severity.Error);
+                return;
+            }
+
+            var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"گزارش آپلود گروهی فایل-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+            await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+        }
+        else if (function == 3)
+        {
+            var filter = new ReportFilterModel
+            {
+                Search = searchString,
+                StartDate = StartDate,
+                EndDate = EndDate
+
+            };
+            var base64 = await repService.GetRestartReportsExcel(filter);
+            if (string.IsNullOrWhiteSpace(base64))
+            {
+                snackbar.Add("فایل تولید نشد.", Severity.Error);
+                return;
+            }
+
+            var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"گزارش راه اندازی مجدد دستگاه ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+            await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+        }
+    }
+
+
+
+
+
+
+    private async Task FilterDate(MouseEventArgs args)
+    {
+        var parameters = new DialogParameters();
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            Position = DialogPosition.Center
+        };
+        var dialog = DialogService.Show<JournalRangeDialog>("بازه تاریخی مد نظر را وارد نمایید", parameters, options);
+        var result = await dialog.Result;
+
+        if (result.Canceled)
+            return;
+             var currentCulture = CultureInfo.CurrentCulture;
+                       CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var range = (DateRange)result.Data!;
+        var start = range.Start!.Value.Date;
+        StartDate =start ;
+        EndDate = range.End!.Value.Date;
+        if (selectedReport == 2)
+        {
+            await tableFileUpload.ReloadServerData();
+        }
+        else
+        {
+            await tableDeviceRestart.ReloadServerData();
+        }
+        CultureInfo.CurrentCulture = currentCulture;
+    }
+}

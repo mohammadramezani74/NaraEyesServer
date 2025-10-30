@@ -5,12 +5,14 @@ using NaraEyes.Application.Contracts.Interfaces.Devices;
 using NaraEyes.Application.Contracts.Interfaces.Identity;
 using NaraEyes.Application.Contracts.Interfaces.Metrics;
 using NaraEyes.Application.Contracts.Interfaces.Modules;
+using NaraEyes.Application.Contracts.Interfaces.Reports;
 using NaraEyes.Application.Services.Base;
 using NaraEyes.Application.Services.Bulkoperations;
 using NaraEyes.Application.Services.Devices;
 using NaraEyes.Application.Services.Identity;
 using NaraEyes.Application.Services.Metrics;
 using NaraEyes.Application.Services.Modules;
+using NaraEyes.Application.Services.Reports;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -35,6 +37,7 @@ namespace NaraEyes.Application
             services.AddScoped<IModuleServices, ModulesService>();
             services.AddScoped<IBulkoperationsService, BulkoperationsService>();
             services.AddSingleton<IInBoxBatchWriter, InBoxBatchWriter>();
+            services.AddScoped<IReportService, ReportService>();
             services.AddHostedService(sp => (InBoxBatchWriter)sp.GetRequiredService<IInBoxBatchWriter>());
 
             return services;

@@ -98,6 +98,7 @@ namespace NaraEyes.Application.Contracts.Utilities
 
         public static DateTime ToGeorgianDateTime(this string persianDate)
         {
+
             persianDate = persianDate.ToEnglishNumber();
             var year = Convert.ToInt32(persianDate.Substring(0, 4));
             var month = Convert.ToInt32(persianDate.Substring(5, 2));

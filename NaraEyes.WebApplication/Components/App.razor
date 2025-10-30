@@ -19,6 +19,16 @@
     <script src="_framework/blazor.web.js"></script>
     <script src="@Assets["_content/MudBlazor/MudBlazor.min.js"]"></script>
     <script src="_content/CurrieTechnologies.Razor.SweetAlert2/sweetAlert2.min.js"></script>
+    <script>
+                     window.downloadBase64File = (contentType, base64Data, fileName) => {
+          const a = document.createElement('a');
+          a.href = `data:${contentType};base64,${base64Data}`;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        };
+    </script>
 </body>
 
 </html>

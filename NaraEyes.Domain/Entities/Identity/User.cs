@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using NaraEyes.Domain.Enumerations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,7 +13,9 @@ namespace NaraEyes.Domain.Entities.Identity
         public string? FirstName { get; private set; }
         public string? LastName { get; private set; }
         public bool IsActive { get; private set; } = true;
-        public DateTime? LastLoginDate { get; private set; }
+        public CommandType LastInstruction { get;private set; }
+        public DateTime? LastInstructionDate { get; private set; }
+        public DateTime? LastLoginDate { get; private  set; }
         public ICollection<IdentityUserRole<Guid>> UserRoles { get; } = new List<IdentityUserRole<Guid>>();
         public void SetName(string firstName, string lastName)
         {
@@ -33,6 +36,11 @@ namespace NaraEyes.Domain.Entities.Identity
         public void SetLastLoginDate()
         {
             LastLoginDate = DateTime.Now;
+        }
+        public void SetLastCommand(CommandType type)
+        {
+            LastInstruction = type;
+            LastInstructionDate = DateTime.Now;
         }
     }
 }

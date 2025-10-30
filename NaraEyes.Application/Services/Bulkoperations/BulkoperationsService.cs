@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using NaraEyes.Application.Abstraction.Identity;
@@ -44,8 +45,8 @@ namespace NaraEyes.Application.Services.Bulkoperations
             var userId = _userManamager.UserId;
 
              CreatedUrl =await Uploader.Upload(file, environment);
-        
-            var newOutBoxMwssage = OutBoxDeviceMessage.CreateForCampaign("255.255.255.0", userId);
+
+                var newOutBoxMwssage = OutBoxDeviceMessage.CreateForCampaign("255.255.255.0", userId, CommandType.UploadGroupFile,file.Name);
             _uow.OutBoxDeviceMessages.Add(newOutBoxMwssage);
 
             var campain = Campaign.createCampaign(type, newOutBoxMwssage.Id, EnumHelper.GetEnumDisplayName(type),userId);
@@ -65,8 +66,12 @@ namespace NaraEyes.Application.Services.Bulkoperations
                 var json = JsonSerializer.Serialize(payload);
                 campain.ManifestJson = json;
                 _uow.Campaigns.Add(campain);
-
-            await _uow.SaveChangesAsync(cancellationToken);
+                var targetUser = await _userManamager.GetUserBy(userId!.Value);
+                if (targetUser != null)
+                {
+                    targetUser.SetLastCommand(CommandType.UploadGroupFile);
+                }
+                await _uow.SaveChangesAsync(cancellationToken);
                 return op.succedded();
                         }
             catch (Exception ex)
@@ -155,7 +160,7 @@ namespace NaraEyes.Application.Services.Bulkoperations
                 var userId = _userManamager.UserId!.Value;
 
 
-                var newOutBoxMwssage = OutBoxDeviceMessage.CreateForCampaign("255.255.255.0", userId);
+                var newOutBoxMwssage = OutBoxDeviceMessage.CreateForCampaign("255.255.255.0", userId, CommandType.ResetGroup);
                 _uow.OutBoxDeviceMessages.Add(newOutBoxMwssage);
 
                 var campain = Campaign.createCampaign(type, newOutBoxMwssage.Id, EnumHelper.GetEnumDisplayName(type), userId);
@@ -174,6 +179,11 @@ namespace NaraEyes.Application.Services.Bulkoperations
                 };
                 var json = JsonSerializer.Serialize(payload);
                 campain.ManifestJson = json;
+                var targetUser = await _userManamager.GetUserBy(userId);
+                if (targetUser != null)
+                {
+                    targetUser.SetLastCommand(CommandType.ResetGroup);
+                }
                 await _uow.SaveChangesAsync(cancellationToken);
                 return op.succedded();
             }

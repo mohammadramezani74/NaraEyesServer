@@ -1,4 +1,5 @@
-﻿using NaraEyes.Application.Contracts.Models.Basic;
+﻿using Microsoft.AspNetCore.Identity;
+using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Identity;
 using System;
 using System.Collections.Generic;
@@ -15,5 +16,6 @@ namespace NaraEyes.Application.Contracts.Interfaces.Identity
         Task<OperationResult>UpdateUserAsync(UpdateUserModel command, CancellationToken cancellationToken);
         Task<OperationResult>DeleteUserAsync(Guid userId, CancellationToken cancellationToken);
         Task<OperationResult> ChangePassword(ChangePasswordModel command, CancellationToken cancellationToken);
+        Task SigninUser(string username, CancellationToken cts = default);
     }
 }

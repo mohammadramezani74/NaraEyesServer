@@ -3,6 +3,7 @@
 @using MudBlazor
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Interfaces.Identity
 @using NaraEyes.Application.Contracts.Models.Basic
 @using NaraEyes.Application.Contracts.Models.Devices
 @using NaraEyes.Domain.Enumerations            
@@ -13,6 +14,7 @@
 @inject IBranchService BranchService
 @inject IDialogService DialogService
 @inject IJSRuntime JS
+@inject IUserService userService
 @inject NavigationManager Nav
 
 
@@ -168,13 +170,6 @@
       a.remove();
     };
 
-            window.downloadBase64File = (contentType, base64Data, fileName) => {
-      const a = document.createElement('a');
-      a.href = `data:${contentType};base64,${base64Data}`;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
     };
 </script>
 

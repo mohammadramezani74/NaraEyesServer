@@ -20,6 +20,7 @@ namespace NaraEyes.Domain.Entities.BulkOperation
                 DeviceIp = Ip,
                 CreatedByUserId = UserId,
                 IsProccessed = false,
+                
 
             };
         public void ProccessdAt()

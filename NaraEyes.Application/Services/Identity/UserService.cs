@@ -6,18 +6,15 @@ using NaraEyes.Application.Contracts.Interfaces.Identity;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Identity;
 using NaraEyes.Domain.Entities.Identity;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace NaraEyes.Application.Services.Identity
 {
-    public class UserService(IApplicationUnitOfWork uow, UserManager<User> userManager, IApplicationUserManager applicationUserManager) : IUserService
+    public class UserService(IApplicationUnitOfWork uow, UserManager<User> userManager, SignInManager<User> SignInManager, IApplicationUserManager applicationUserManager) : IUserService
     {
         private readonly IApplicationUnitOfWork _uow = uow;
         private readonly UserManager<User> _userManager = userManager;
+        private readonly SignInManager<User> signInManager = SignInManager;
         private readonly IApplicationUserManager _applicationUserManager=applicationUserManager;
         public async Task<IReadOnlyList<UserViewModel>> AllUsers(CancellationToken cancellationToken)
         {
@@ -289,7 +286,17 @@ namespace NaraEyes.Application.Services.Identity
             return s;
         }
 
-
+        public async Task SigninUser(string username, CancellationToken cts = default)
+        {
+  var targetuser = await _uow.Users.Where(x => x.UserName.Trim().Equals(username.Trim())).FirstOrDefaultAsync(cts);
+                if (targetuser != null)
+                {
+                    targetuser.SetLastLoginDate();
+                    await _uow.SaveChangesAsync();
+               }
+            
+                
+        }
     }
 }
 

@@ -19,7 +19,7 @@ namespace NaraEyes.Domain.Entities.Base
         public string? StartDate { get; set; }
         public string? EndDate { get; set; }
         public Campaign?  Campaign { get; set; }
-        public static OutBoxDeviceMessage CreateForCampaign(string Ip,Guid? userId)
+        public static OutBoxDeviceMessage CreateForCampaign(string Ip,Guid? userId, Enumerations.CommandType type,string? FileName=null)
        => new OutBoxDeviceMessage
        {
          Id=Guid.NewGuid(),
@@ -27,7 +27,8 @@ namespace NaraEyes.Domain.Entities.Base
          DeviceIp=Ip,
          CreateDate=DateTime.Now,
          CreatedByUserId= userId,
-         CommandType=Enumerations.CommandType.UploadFile,
+         CommandType= type,
+         Payload= FileName??"GroupReset"
        };
     }
 }

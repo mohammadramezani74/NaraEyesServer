@@ -1,5 +1,6 @@
 ﻿using DocumentFormat.OpenXml.Drawing.Diagrams;
 using Microsoft.EntityFrameworkCore;
+using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Application.Abstraction.Unitofwork;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
@@ -26,16 +27,24 @@ namespace NaraEyes.Infrastructure.QueueImplemention
     internal class OutboxService : IOutboxService
     {
         private readonly IApplicationUnitOfWork _uow;
+        private readonly IApplicationUserManager _userManager;
         private readonly IDeviceSignalHub _signals;
 
-        public OutboxService(IApplicationUnitOfWork uow, IDeviceSignalHub signals)
+        public OutboxService(IApplicationUnitOfWork uow, IDeviceSignalHub signals, IApplicationUserManager userManager)
         {
             _uow = uow;
             _signals = signals;
+            _userManager = userManager;
         }
 
         public async Task EnqueueCommandAsync(OutBoxDeviceMessage command, CancellationToken ct)
         {
+            var userId = _userManager.UserId!.Value;
+          var targetUser=await  _userManager.GetUserBy(userId);
+            if (targetUser != null) {
+                targetUser.SetLastCommand(command.CommandType);
+            }
+
             await _uow.OutBoxDeviceMessages.AddAsync(command, ct);
             await _uow.SaveChangesAsync(ct);
            await _signals.Pulse(command.DeviceIp);
