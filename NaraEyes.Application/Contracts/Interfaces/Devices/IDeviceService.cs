@@ -28,6 +28,7 @@ namespace NaraEyes.Application.Contracts.Interfaces.Devices
         Task<PageResultDto<DeviceViewModel>> GetAllDevicesAsync(DeviceFilterViewModel filter, CancellationToken cancellationToken = default);
 
         Task<byte[]> RequestScreenshotAsync(string deviceIp, CancellationToken ct = default);
+        Task<bool> GetForcesStatus(string deviceIp, CancellationToken ct = default);
         Task<bool> RestartOrShutdownDevice(bool isrestart,string deviceIp, CancellationToken cancellationToken = default);
         Task<DeviceMetricsViewModel>GetMetricsAsync(string deviceIp, CancellationToken cancellationToken = default);
         Task<byte[]?> RequestJournalAsync(string deviceIp, DateTime startLocal, DateTime endLocal, CancellationToken ct = default);
@@ -40,5 +41,9 @@ namespace NaraEyes.Application.Contracts.Interfaces.Devices
         Task<List<BranchErrorAggDto>> GetTop10BranchesByErrorsAsync(CancellationToken ct = default);
         Task<int> CheckHeartBeat( CancellationToken cancellationToken = default);
         Task<string> ExportExcelAsync(DeviceFilterViewModel filter,CancellationToken cancellation=default);
+        Task<OperationResult> CreateDevice(CreateDeviceViewModel model, CancellationToken cancellationToken = default);
+        Task<bool> AddDeviceWithExcel(IBrowserFile file, CancellationToken cancellationToken = default);
+        Task<string?> GetSampleFileForDownload(CancellationToken cancellationToken = default);
+        Task<string?> GetDeviceReport(CancellationToken cancellationToken = default);
     }
 }

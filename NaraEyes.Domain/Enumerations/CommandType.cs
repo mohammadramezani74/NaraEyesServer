@@ -36,6 +36,8 @@ namespace NaraEyes.Domain.Enumerations
         UploadGroupFile =14,
         [Display(Name = " راه اندازی گروهی دستگاه ها")]
         ResetGroup =15,
+        [Display(Name = "بروزرسانی وضعیت ها")]
+        GetForcesStatus =16
 
     }
 }

@@ -1,6 +1,24 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using NaraEyes.WebApplication.Components.Layout
+<Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+            <NotAuthorized>
+                <div class="full-center">
+                    <MudPaper Elevation="8" Class="pa-6 d-flex flex-column align-center justify-center notauth-card">
+                        <MudIcon Color="Color.Error" Size="Size.Large" Icon="@Icons.Material.Filled.Lock" Class="mb-3 pulse" />
+                        <MudText Typo="Typo.h5" Class="mb-1">دسترسی مجاز نیست</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-4">
+                            شما مجوز مشاهدهٔ این صفحه را ندارید.<br />
+                            در صورت نیاز با مدیر سیستم تماس بگیرید.
+                        </MudText>
+              
+                    </MudPaper>
+                </div>
+            </NotAuthorized>
+        </AuthorizeRouteView>
     </Found>
+    <NotFound>
+        <p>صفحه پیدا نشد</p>
+    </NotFound>
 </Router>

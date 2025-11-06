@@ -1,10 +1,13 @@
-﻿@using MudBlazor
+﻿@using CurrieTechnologies.Razor.SweetAlert2
+@using MudBlazor
 @using NaraEyes.Application.Abstraction.Identity
 @using NaraEyes.Application.Contracts.Models.Identity
 @using NaraEyes.WebApplication.Components.Dialogs
 @inject IApplicationRoleManager RoleManager
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
 
 <MudPaper Class="p-3 rounded-2xl mt-2">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
@@ -20,6 +23,10 @@
         <MudStack Row="true" Spacing="1">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Reload">رفرش</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddRole">افزودن</MudButton>
+            <MudIconButton OnClick="GetReportExcel" Color="Color.Success"
+                           Variant="Variant.Filled"
+                           Size="Size.Medium"
+                           Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
         </MudStack>
     </MudStack>
 
@@ -211,4 +218,19 @@
         public Guid Id { get; set; }
         public string Name { get; set; } = "";
     }
+    private async Task GetReportExcel(MouseEventArgs args)
+    {
+        var base64 = await RoleManager.GetRoleReport();
+        if (string.IsNullOrWhiteSpace(base64))
+        {
+            await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+            return;
+        }
+
+        var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        var fileName = $"گزارش-نقش ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+        await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+}
 }

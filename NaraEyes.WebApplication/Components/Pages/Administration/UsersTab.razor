@@ -1,4 +1,5 @@
-﻿@using MudBlazor
+﻿@using CurrieTechnologies.Razor.SweetAlert2
+@using MudBlazor
 @using NaraEyes.Application.Abstraction.Identity
 @using NaraEyes.Application.Contracts.Interfaces.Identity
 @using NaraEyes.Application.Contracts.Models.Identity
@@ -8,6 +9,8 @@
 @inject IApplicationRoleManager RoleManager
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
 
 <MudPaper Class="p-3 rounded-2xl mt-2">
 
@@ -24,6 +27,10 @@
         <MudStack Row="true" Spacing="1">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Load">رفرش</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddUser">افزودن</MudButton>
+            <MudIconButton OnClick="GetReportExcel" Color="Color.Success"
+                           Variant="Variant.Filled"
+                           Size="Size.Medium"
+                           Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
         </MudStack>
     </MudStack>
 
@@ -363,5 +370,20 @@
         public bool IsLocked { get; set; }
 
 
+    }
+    private async Task GetReportExcel(MouseEventArgs args)
+    {
+        var base64 = await UserService.GetUserReport();
+        if (string.IsNullOrWhiteSpace(base64))
+        {
+            await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+            return;
+        }
+
+        var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        var fileName = $"گزارش-کاربران-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+        await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
     }
 }

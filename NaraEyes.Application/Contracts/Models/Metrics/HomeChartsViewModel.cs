@@ -6,6 +6,7 @@ namespace NaraEyes.Application.Contracts.Models.Metrics
     {
         public int InServiceCount { get; set; }
         public int warningCount { get; set; }
+        public int OutOfService { get; set; }
         public int errorCount { get; set; }
         public int OnlineCount { get; set; }
         public int offlineCount { get; set; }

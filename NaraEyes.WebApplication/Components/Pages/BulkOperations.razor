@@ -3,6 +3,7 @@
 @using System.Linq
 @using System.Collections.Generic
 @using CurrieTechnologies.Razor.SweetAlert2
+@using Microsoft.AspNetCore.Authorization
 @using MudBlazor
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Interfaces.Bulkoperations
@@ -19,6 +20,7 @@
 @inject IJSRuntime JS
 @inject SweetAlertService Swal;
 @inject NavigationManager nv
+@attribute [Authorize(Roles = "مدیریت استان,مدیریت مرکزی")]
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6">
     <MudGrid Spacing="3">

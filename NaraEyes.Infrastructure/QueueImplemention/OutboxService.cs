@@ -1,4 +1,5 @@
 ﻿using DocumentFormat.OpenXml.Drawing.Diagrams;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
@@ -29,20 +30,34 @@ namespace NaraEyes.Infrastructure.QueueImplemention
         private readonly IApplicationUnitOfWork _uow;
         private readonly IApplicationUserManager _userManager;
         private readonly IDeviceSignalHub _signals;
+        AuthenticationStateProvider auth;
 
-        public OutboxService(IApplicationUnitOfWork uow, IDeviceSignalHub signals, IApplicationUserManager userManager)
+        public OutboxService(IApplicationUnitOfWork uow, IDeviceSignalHub signals, IApplicationUserManager userManager, AuthenticationStateProvider aauth)
         {
             _uow = uow;
             _signals = signals;
             _userManager = userManager;
+            auth = aauth;
         }
 
         public async Task EnqueueCommandAsync(OutBoxDeviceMessage command, CancellationToken ct)
         {
-            var userId = _userManager.UserId!.Value;
-          var targetUser=await  _userManager.GetUserBy(userId);
-            if (targetUser != null) {
-                targetUser.SetLastCommand(command.CommandType);
+            var userId = _userManager.UserId;
+            var state = await auth.GetAuthenticationStateAsync();
+            var user = state.User;
+            var idValue = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (Guid.TryParse(idValue, out var gid))
+                userId = gid;
+            else
+                userId = null;
+            if (userId != null)
+            {
+                var targetUser = await _userManager.GetUserBy(userId.Value);
+                if (targetUser != null)
+                {
+                    targetUser.SetLastCommand(command.CommandType);
+                }
             }
 
             await _uow.OutBoxDeviceMessages.AddAsync(command, ct);
@@ -51,20 +66,29 @@ namespace NaraEyes.Infrastructure.QueueImplemention
         }
 
         public async Task<List<OutBoxDeviceMessage>> GetPendingCommandsAsync(string deviceIp, CancellationToken ct)
-        { string groupedIp = "255.255.255.0";
+        { 
+            string groupedIp = "255.255.255.0";
             var list = new List<OutBoxDeviceMessage>();
+            var outBoxMessageGroup= new List<OutBoxDeviceMessage>();
             var ordinaryMessage= await _uow.OutBoxDeviceMessages
      .Where(m => m.DeviceIp == deviceIp && !m.Processed&&m.DeviceIp!= groupedIp)
      .OrderBy(m => m.CreateDate)
      .ToListAsync(ct);
             list.AddRange(ordinaryMessage);
+            var isExistedGroupMessage=await _uow.OutBoxDeviceMessages.AsNoTracking()
+                .AnyAsync(x=>x.DeviceIp==groupedIp
+                &&!x.Processed&&
+                x.Campaign.Status==OperationStatus.Queued);
+            if (isExistedGroupMessage)
+            {
+                 outBoxMessageGroup = await _uow.OutBoxDeviceMessages
+                    .Include(x => x.Campaign.Targets)
+                    .Where(x => !x.Processed && x.DeviceIp == groupedIp
+                    && x.Campaign.Status == OperationStatus.Queued
+                    && x.Campaign.Targets.Any(x => x.DeviceIp == deviceIp && x.IsProccessed == false))
+                    .ToListAsync(ct);
+            }
 
-            var outBoxMessageGroup = await _uow.OutBoxDeviceMessages
-                .Include(x => x.Campaign.Targets)
-                .Where(x => !x.Processed && x.DeviceIp == groupedIp
-                &&x.Campaign.Status== OperationStatus.Queued
-                && x.Campaign.Targets.Any(x => x.DeviceIp == deviceIp && x.IsProccessed == false))
-                .ToListAsync(ct);
 
             foreach (var messagebox in outBoxMessageGroup)
             {
@@ -77,7 +101,8 @@ namespace NaraEyes.Infrastructure.QueueImplemention
                 {
                     Id= messagebox.Id,
                     CommandType= type.OperationType==OperationType.FileSend?CommandType.UploadGroupFile: CommandType.ResetGroup,
-                    Payload=type.ManifestJson
+                    Payload=type.ManifestJson,
+                    
 
                 };
                 list.Add(newinstruction);

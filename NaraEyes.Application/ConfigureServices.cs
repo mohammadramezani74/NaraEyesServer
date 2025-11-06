@@ -39,6 +39,7 @@ namespace NaraEyes.Application
             services.AddSingleton<IInBoxBatchWriter, InBoxBatchWriter>();
             services.AddScoped<IReportService, ReportService>();
             services.AddHostedService(sp => (InBoxBatchWriter)sp.GetRequiredService<IInBoxBatchWriter>());
+            services.AddSingleton<ICommandDispatchState, CommandDispatchState>();
 
             return services;
         }

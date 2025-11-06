@@ -28,17 +28,17 @@ namespace NaraEyes.Application.Contracts.Models.Modules.Idc
             _ => $"({v}) مقدار ناشناخته"
         };
 
-     
-      public static  string GetChipPowerText(int v) => v switch
+
+        public static string GetChipPowerText(ushort v) => v switch
         {
-            1 => "تراشه فعال و آماده است",
-            2 => "تراشه وجود دارد اما خاموش است",
-            3 => "تراشه روشن اما مشغول است",
-            4 => "کارت وجود دارد ولی تراشه ندارد",
-            5 => "خطای سخت‌افزاری در تراشه (MUTE یا مشابه)",
-            6 => "هیچ کارتی در دستگاه نیست",
-            7 => "گزارش وضعیت تراشه پشتیبانی نمی‌شود",
-            8 => "وضعیت تراشه نامشخص است",
+            0 => "تراشه فعال و آماده است",                // WFS_IDC_CHIPONLINE
+            1 => "تراشه وجود دارد اما خاموش است",         // WFS_IDC_CHIPPOWEREDOFF
+            2 => "تراشه روشن اما مشغول است",              // WFS_IDC_CHIPBUSY
+            3 => "کارت وجود دارد ولی تراشه ندارد",        // WFS_IDC_CHIPNODEVICE
+            4 => "خطای سخت‌افزاری در تراشه (MUTE یا مشابه)", // WFS_IDC_CHIPHWERROR
+            5 => "هیچ کارتی در دستگاه نیست",             // WFS_IDC_CHIPNOCARD
+            6 => "گزارش وضعیت تراشه پشتیبانی نمی‌شود",   // WFS_IDC_CHIPNOTSUPP
+            7 => "وضعیت تراشه نامشخص است",               // WFS_IDC_CHIPUNKNOWN
             _ => $"({v}) مقدار ناشناخته"
         };
     }

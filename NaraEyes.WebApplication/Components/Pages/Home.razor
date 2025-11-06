@@ -6,7 +6,7 @@
 @using NaraEyes.Application.Contracts.Models.Devices
 @using NaraEyes.Application.Contracts.Models.Metrics
 @using System.Globalization
-@attribute [Authorize]
+@attribute [Authorize(Roles = "حراست مرکزی,مدیریت استان,مدیریت مانیتورینگ,مدیریت مرکزی")]
 @implements IDisposable
 @inject IDeviceService service
 @rendermode InteractiveServer
@@ -55,9 +55,9 @@
 
         <div class="stat-card">
             <MudPaper Class="stat-paper">
-                <MudText Typo="Typo.overline" Class="text-error">Error</MudText>
-                <MudText Typo="Typo.h4">@errorCount</MudText>
-                <MudText Typo="Typo.caption" Class="text-secondary">دارای خطا</MudText>
+                <MudText Typo="Typo.overline" Class="text-error">OutofService</MudText>
+                <MudText Typo="Typo.h4">@outofService</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary">خارج از سرویس</MudText>
             </MudPaper>
         </div>
 
@@ -65,7 +65,7 @@
             <MudPaper Class="stat-paper">
                 <MudText Typo="Typo.overline">Offline</MudText>
                 <MudText Typo="Typo.h4">@offlineCount</MudText>
-                <MudText Typo="Typo.caption" Class="text-secondary">قطع از سرویس</MudText>
+                <MudText Typo="Typo.caption" Class="text-secondary"> آقلاین </MudText>
             </MudPaper>
         </div>
     </MudStack>
@@ -81,59 +81,97 @@
                 <MudChart ChartType="ChartType.Donut"
                           InputLabels="@statusLabels"
                           InputData="@statusData"
+                          ChartOptions="@chartOptions"
+                          SelectedIndex="@_selectedStatusIndex"
+                          SelectedIndexChanged="@OnStatusSliceChanged"
                           Style="height:300px" />
             </MudPaper>
         </MudItem>
 
-    <MudItem xs="12" md="8">
-    <MudPaper Class="p-4 rounded-2xl">
+<MudItem xs="12" md="8">
+            <MudPaper Class="p-4 rounded-2xl" Style="@(_selectedStatusIndex==1? "height: 541px;":"")">
         <div class="d-flex justify-space-between align-center mb-2">
-            <MudText Typo="Typo.subtitle1">Top 10 شعبه با بیشترین خطا</MudText>
-            <MudText Typo="Typo.caption" Class="text-secondary">براساس آخرین وضعیت ماژول‌ها</MudText>
+            @if (_selectedStatusIndex == 1)
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle1">جزئیات دستگاه‌های OutOfService</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        تفکیک دستگاه‌های آفلاین و دارای خطا
+                    </MudText>
+                </div>
+                <MudChip T="string" OnClick="@ResetStatusSelection"
+                         Variant="Variant.Outlined"
+                         Color="Color.Default"
+                         Size="Size.Small">
+                    بازگشت
+                </MudChip>
+            }
+            else
+            {
+                <div>
+                    <MudText Typo="Typo.subtitle1">Top 10 شعبه با بیشترین خطا</MudText>
+                    <MudText Typo="Typo.caption" Class="text-secondary">
+                        براساس آخرین وضعیت ماژول‌ها
+                    </MudText>
+                </div>
+            }
         </div>
 
-        <MudChart ChartType="ChartType.Bar"
-                  XAxisLabels="@_branchErrorLabels"
-                  ChartSeries="@_branchErrorSeries"
-                  ChartOptions="@_branchErrorOptions"
-                  Style="height:320px" />
+        @if (_selectedStatusIndex == 1)
+        {
+            <!-- نمودار میله‌ای Breakdown OutOfService -->
+            <MudChart ChartType="ChartType.StackedBar"
+                      XAxisLabels="@_outOfServiceLabels"
+                      ChartSeries="@_outOfServiceSeries"
+                      ChartOptions="@_outOfServiceOptions"
+                      Style="height:320px" />
+        }
+        else
+        {
+            <!-- حالت عادی: Top 10 شعبه -->
+            <MudChart ChartType="ChartType.Bar"
+                      XAxisLabels="@_branchErrorLabels"
+                      ChartSeries="@_branchErrorSeries"
+                      ChartOptions="@_branchErrorOptions"
+                      Style="height:320px" />
 
-        <MudDivider Class="my-3" />
+            <MudDivider Class="my-3" />
 
-        <!-- جدول جمع‌وجور برای دریل‌داون -->
-        <MudTable Items="@_branchTop" Dense="true" Hover="true" Bordered="false" Elevation="0"
-                  RowStyle="cursor:pointer"
-                > 
-            <HeaderContent>
-                <MudTh Class="text-center">#</MudTh>
-                <MudTh>شعبه</MudTh>
-                <MudTh Class="text-center">ماژول‌های خطادار</MudTh>
-                <MudTh Class="text-center">دستگاه‌های درگیر</MudTh>
-                <MudTh></MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd Class="text-center">@(@contextRank(@context))</MudTd>
-                <MudTd>@context.BranchName</MudTd>
-                <MudTd Class="text-center">
-                    <MudChip T="String" Color="Color.Error" Variant="Variant.Filled" Size="Size.Small">
-                        @context.ErrorModules
-                    </MudChip>
-                </MudTd>
-                <MudTd Class="text-center">
-                            <MudChip T="String" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small">
-                        @context.AffectedDevices
-                    </MudChip>
-                </MudTd>
-                <MudTd Class="text-right">
-                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Color="Color.Primary" />
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText Class="text-secondary p-4">داده‌ای برای نمایش وجود ندارد.</MudText>
-            </NoRecordsContent>
-        </MudTable>
+            <!-- جدول جمع‌وجور برای دریل‌داون شعب -->
+            <MudTable Items="@_branchTop" Dense="true" Hover="true" Bordered="false" Elevation="0"
+                      RowStyle="cursor:pointer">
+                <HeaderContent>
+                    <MudTh Class="text-center">#</MudTh>
+                    <MudTh>شعبه</MudTh>
+                    <MudTh Class="text-center">ماژول‌های خطادار</MudTh>
+                    <MudTh Class="text-center">دستگاه‌های درگیر</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd Class="text-center">@(@contextRank(@context))</MudTd>
+                    <MudTd>@context.BranchName</MudTd>
+                    <MudTd Class="text-center">
+                        <MudChip T="string" Color="Color.Error" Variant="Variant.Filled" Size="Size.Small">
+                            @context.ErrorModules
+                        </MudChip>
+                    </MudTd>
+                    <MudTd Class="text-center">
+                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Small">
+                            @context.AffectedDevices
+                        </MudChip>
+                    </MudTd>
+                    <MudTd Class="text-right">
+                        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Color="Color.Primary" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="text-secondary p-4">داده‌ای برای نمایش وجود ندارد.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
     </MudPaper>
 </MudItem>
+
 
         <MudItem xs="12">
             <MudPaper Class="p-4 rounded-2xl">
@@ -164,7 +202,7 @@ private static CultureInfo CreateFaCulture()
 }
     private ChartOptions _branchErrorOptions = new()
     {
-        ChartPalette = new[] { "#E53935", "#FB8C00" } // قرمز برای خطا، نارنجی برای دستگاه‌های درگیر
+        ChartPalette = new[] { "#EF4444", "#ffc113" }  // قرمز برای خطا، نارنجی برای دستگاه‌های درگیر
     };
     private int @contextRank(BranchErrorAggDto row)
     {
@@ -212,9 +250,11 @@ private static CultureInfo CreateFaCulture()
     private DateTime now = DateTime.Now;
     private System.Timers.Timer? clockTimer;
 
-    // ---- Fake KPI ----
-    private int totalDevices = 950;
+    private int _selectedStatusIndex;
+
+    private int totalDevices;
     private int inServiceCount;
+    private int outofService;
     private int OnlineCount;
     private int warningCount;
     private int errorCount;
@@ -222,9 +262,37 @@ private static CultureInfo CreateFaCulture()
     private int totalBranches;
     private int totalSupervision;
     private int totalUsers;
+    private string[] _outOfServiceLabels = Array.Empty<string>();
+    private List<ChartSeries> _outOfServiceSeries = new();
+    private ChartOptions _outOfServiceOptions = new()
+    {
+        ChartPalette = new[] { "#9CA3AF", "#EF4444" } // خاکستری برای Offline، قرمز برای Error
+    };
+    private void ResetStatusSelection()
+    {
+        _selectedStatusIndex = 0;
+    }
+    private void BuildOutOfServiceBreakdown()
+    {
+        _outOfServiceLabels = new[] { "آفلاین", "دارای خطا" };
+
+        _outOfServiceSeries = new()
+    {
+        new ChartSeries
+        {
+            Name = "دستکاه های آفلاین",
+            Data = new double[] { offlineCount, 0 }
+        },
+           new ChartSeries
+        {
+            Name = "دستکاه های خطادار",
+            Data = new double[] { 0, errorCount }
+        }
+    };
+    }
 
     // ---- Donut (Pie/Donut = Input*) ----
-    private string[] statusLabels = new[] { "InService","Online", "Warning",  "Offline","Error", };
+    private string[] statusLabels = new[] { "InService","OutofService", };
     private double[] statusData = Array.Empty<double>();
 
     // ---- Line (Line/Bar = ChartSeries + XAxisLabels) ----
@@ -243,6 +311,16 @@ private static CultureInfo CreateFaCulture()
         ChartPalette = new[] { "#64B5F6", "#34D399", "#8B5CF6", "#FBBF24" }, // آبی، سبز، قرمز
 
     };
+    private void OnStatusSliceChanged(int index)
+    {
+        _selectedStatusIndex = (index == 1) ? 1 :0;
+    }
+
+       private ChartOptions chartOptions = new()
+    {
+        ChartPalette = new[] { "#34D399","#B91C1C" }, // آبی، سبز، قرمز
+
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -253,6 +331,7 @@ private static CultureInfo CreateFaCulture()
         {
             totalDevices = data.TotalDevice;
             inServiceCount = data.InServiceCount;
+            outofService = data.OutOfService;
             errorCount = data.errorCount;
             offlineCount = data.offlineCount;
             warningCount = data.warningCount;
@@ -262,6 +341,7 @@ private static CultureInfo CreateFaCulture()
             userName = data.Name;
             totalUsers = data.TotalUsers;
         }
+        BuildOutOfServiceBreakdown();
         await LoadTopBranchesChartAsync();
         GenerateFakeKpis();
         GenerateOverviewBar();     
@@ -280,7 +360,7 @@ private static CultureInfo CreateFaCulture()
     private void GenerateFakeKpis()
     {
 
-        statusData = new double[] { inServiceCount, OnlineCount, warningCount, offlineCount, errorCount };
+        statusData = new double[] { inServiceCount, outofService };
     }
 
 

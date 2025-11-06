@@ -1,4 +1,5 @@
-﻿@using MudBlazor
+﻿@using CurrieTechnologies.Razor.SweetAlert2
+@using MudBlazor
 @using System.Net.Http.Json
 @using NaraEyes.Application.Contracts.Interfaces.Devices
 @using NaraEyes.Application.Contracts.Models.Basic
@@ -8,6 +9,8 @@
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
 @inject IDeviceService DeviceService
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
 
 <MudPaper Class="p-3 rounded-2xl mt-2">
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
@@ -23,7 +26,11 @@
         <MudStack Row="true" Spacing="1">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Load">رفرش</MudButton>
             <!-- اگر ایجاد دستگاه داری، این دکمه را فعال کن -->
-            @* <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddDevice">افزودن</MudButton> *@
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddDevice">افزودن</MudButton>
+            <MudIconButton OnClick="AddDeviceWithExcel" Color="Color.Success"
+                           Variant="Variant.Filled"
+                           Size="Size.Medium"
+                           Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
         </MudStack>
     </MudStack>
 
@@ -55,6 +62,7 @@
                 <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => EditDevice(context))" />
                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => DeleteDevice(context))" />
+                
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -167,4 +175,94 @@
             }
         }
     }
+    private async Task AddDevice(MouseEventArgs args)
+    {
+
+
+        var parameters = new DialogParameters<AddDeviceDialoge> ();
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+        var dialog = Dialog.Show<AddDeviceDialoge>($"افزودن دستگاه", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is bool ok && ok)
+        {
+            Snackbar.Add("تغییرات ذخیره شد.", Severity.Success);
+            await Load();
+        }
+    }
+    private async Task AddDeviceWithExcel(MouseEventArgs args)
+    {
+        var options = new DialogOptions()
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+
+        };
+
+        var dialog = Dialog.Show<DevicesExcelDialog>(
+            "عملیات اکسل روی دستگاه‌ ها",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+        if (result.Canceled)
+            return;
+
+        if (result.Data is int action)
+        {
+
+            if (action == 1)
+            {
+                var base64 = await DeviceService.GetDeviceReport();
+                if (string.IsNullOrWhiteSpace(base64))
+                {
+                    await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                    return;
+                }
+
+                var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"گزارش-دستگاه ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+                await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+            }
+            if (action == 2)
+            {
+                var base64 = await DeviceService.GetSampleFileForDownload();
+                if (string.IsNullOrWhiteSpace(base64))
+                {
+                    await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                    return;
+                }
+
+                var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"دانلود فایل نمونه.xlsx";
+
+
+                await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+            }
+            if (action == 3)
+            {
+
+                await Swal.FireAsync("عملیات", "ایمپورت فایل اکسل با موفقیت انجام شد", SweetAlertIcon.Success);
+                _devices = (await DeviceService.GetDevicesAsync(CancellationToken.None)).ToList();
+                return;
+
+
+            }
+            if (action == 4)
+            {
+
+                await Swal.FireAsync("خطا", "ایمپورت فایل اکسل با خطا مواجه شد", SweetAlertIcon.Error);
+                return;
+
+
+            }
+    }
+}
 }

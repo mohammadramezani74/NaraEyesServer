@@ -1,0 +1,226 @@
+﻿@using MudBlazor
+@using System.ComponentModel.DataAnnotations
+@using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Models.Devices
+@inject ISnackbar Snackbar
+@inject IDeviceService DeviceService
+@inject IBranchService BranchService
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="@Model" OnValidSubmit="OnSubmit">
+            <DataAnnotationsValidator />
+            <MudTabs>
+
+                <!-- اطلاعات پایه -->
+                <MudTabPanel Text="اطلاعات پایه" Icon="@Icons.Material.Filled.Info">
+                    <MudGrid Class="mt-2">
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField T="int?" @bind-Value="Model.Code" Label="کُد" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="Model.Ip" Label="IP" Required="true" For="@(() => Model.Ip)" />
+                        </MudItem>
+
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="Model.SerialNo" Label="سریال" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="Model.Model" Label="مدل" />
+                        </MudItem>
+
+                    
+                   
+                    </MudGrid>
+                </MudTabPanel>
+
+
+
+                <!-- مختصات -->
+                <MudTabPanel Text="مختصات" Icon="@Icons.Material.Filled.LocationOn">
+                    <MudStack Row="true" Spacing="2" Class="mt-2">
+                        <MudNumericField T="decimal?" @bind-Value="Model.Latitude" Label="Latitude" Min="-90" Max="90" />
+                        <MudNumericField T="decimal?" @bind-Value="Model.Longitude" Label="Longitude" Min="-180" Max="180" />
+                    </MudStack>
+                </MudTabPanel>
+
+                <!-- وابستگی سازمانی (Autocomplete برنچ) -->
+                <MudTabPanel Text="وابستگی سازمانی" Icon="@Icons.Material.Filled.Apartment">
+                    <MudGrid Class="mt-2">
+                        <MudItem xs="12" sm="8">
+                            <MudAutocomplete T="BranchesViewModel"
+                                             @bind-Value="_selectedBranch"
+                                             Label="انتخاب شعبه"
+                                             Placeholder="نام/کُد/سرپرستی/تلفن/کدپستی/آدرس..."
+                                             ToStringFunc="BranchToString"
+                                             Dense="true"
+                                             Clearable="true"
+                                             ResetValueOnEmptyText="false"
+                                             CoerceText="true"
+                                             SearchFunc="SearchBranches"
+                                             DebounceInterval="300"
+                                             Disabled="_branchesLoading"
+                                             Class="w-full"
+                                             OnBlur="OnBranchBlur"
+                                             OnSelectedItemChanged="OnBranchChanged" />
+                        </MudItem>
+                        @* <MudItem xs="12" sm="4">
+                            <MudTextField Value="@((Model.BranchId?.ToString()) ?? "-")" Label="BranchId" ReadOnly="true" />
+                        </MudItem> *@
+                    </MudGrid>
+
+                    @if (_selectedBranch is not null)
+                    {
+                        <MudPaper Class="p-3 mt-2 rounded-lg">
+                            <MudText Typo="Typo.subtitle2">جزئیات شعبه انتخاب‌شده</MudText>
+                            <MudList T="string" Dense="true">
+                                <MudListItem T="string"><b>نام:</b>&nbsp;@(_selectedBranch.Name ?? _selectedBranch.ShortName)</MudListItem>
+                                <MudListItem T="string"><b>کُد:</b>&nbsp;@_selectedBranch.Code</MudListItem>
+                                <MudListItem T="string"><b>سرپرستی:</b>&nbsp;@_selectedBranch.Supervision</MudListItem>
+                                @if (!string.IsNullOrWhiteSpace(_selectedBranch.Phone))
+                                {
+                                    <MudListItem T="string"><b>تلفن:</b>&nbsp;@_selectedBranch.Phone</MudListItem>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(_selectedBranch.Address))
+                                {
+                                    <MudListItem T="string"><b>آدرس:</b>&nbsp;@_selectedBranch.Address</MudListItem>
+                                }
+                            </MudList>
+                        </MudPaper>
+                    }
+                </MudTabPanel>
+
+               
+
+                <!-- توضیحات -->
+                <MudTabPanel Text="توضیحات" Icon="@Icons.Material.Filled.Description">
+                    <MudTextField @bind-Value="Model.Description" Label="توضیحات" Lines="3" Class="mt-2" />
+                </MudTabPanel>
+
+            </MudTabs>
+
+            <ValidationSummary class="text-error mt-2" />
+        </EditForm>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Submit" Disabled="@_submitting">
+            @if (_submitting)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mx-2" />
+            }
+            ذخیره
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; } = default!;
+ public CreateDeviceViewModel Model { get; set; } = new();
+
+    private bool _submitting;
+
+    // --- Branch Autocomplete state ---
+    private List<BranchesViewModel> _branches = new();
+    private bool _branchesLoading = true;
+    private BranchesViewModel? _selectedBranch;
+
+    // --- فیلدهای محلی برای newcontact (به‌جای bind مستقیم به record init-only) ---
+    private string? _ncName;
+    private string? _ncEmail;
+    private string? _ncTel;
+    private string? _ncPhone;
+    private string? _ncAddress;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branchesLoading = true;
+            _branches = (await BranchService.GetAllBranches(CancellationToken.None)).ToList();
+            if (Model.BranchId is Guid bid)
+                _selectedBranch = _branches.FirstOrDefault(b => b.Id == bid);
+        }
+        catch
+        {
+            Snackbar.Add("خطا در دریافت لیست شعب.", Severity.Error);
+        }
+        finally
+        {
+            _branchesLoading = false;
+        }
+
+    
+    }
+
+    private string BranchToString(BranchesViewModel? b)
+        => b is null ? string.Empty : $"{b.Code} - {(b.ShortName ?? b.Name)}";
+
+    // امضای SearchFunc باید CancellationToken را هم بگیرد
+    private Task<IEnumerable<BranchesViewModel>> SearchBranches(string value, CancellationToken _)
+    {
+        IEnumerable<BranchesViewModel> query = _branches;
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            var s = value.Trim();
+            query = query.Where(b =>
+                (b.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (b.ShortName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                b.Code.ToString().Contains(s, StringComparison.OrdinalIgnoreCase) ||
+                (b.Supervision?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (b.Phone?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (b.PostalCode?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (b.Address?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            );
+        }
+        return Task.FromResult(query.Take(20));
+    }
+
+    // باید Task برگرداند تا با امضای OnSelectedItemChanged سازگار باشد
+    private Task OnBranchChanged(BranchesViewModel? selected)
+    {
+        _selectedBranch = selected;
+        Model.BranchId = selected?.Id;
+        return Task.CompletedTask;
+    }
+
+    private void OnBranchBlur(FocusEventArgs _)
+    {
+        if (_selectedBranch is null)
+            Model.BranchId = null;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit() => await OnSubmit();
+
+    private async Task OnSubmit()
+    {
+        if (_submitting) return;
+        _submitting = true;
+        var branch = _selectedBranch;
+
+        try
+        {
+            Model.BranchId = _selectedBranch.Id;
+
+
+            var res = await DeviceService.CreateDevice(Model, CancellationToken.None);
+            if (res.IsSucceded)
+                MudDialog.Close(DialogResult.Ok(true));
+            else
+                Snackbar.Add(res.Message ?? "عملیات ناموفق.", Severity.Warning);
+        }
+        catch
+        {
+            Snackbar.Add("خطای غیرمنتظره‌ای رخ داد.", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

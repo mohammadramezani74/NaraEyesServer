@@ -1,4 +1,5 @@
-﻿@using MudBlazor
+﻿@using CurrieTechnologies.Razor.SweetAlert2
+@using MudBlazor
 @using System.Net.Http.Json
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Models.Basic
@@ -6,6 +7,8 @@
 @inject ISnackbar Snackbar
 @inject IDialogService Dialog
 @inject IBranchService BranchService
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
 
 <MudPaper Class="p-3 rounded-2xl mt-2">
 
@@ -23,6 +26,10 @@
         <MudStack Row="true" Spacing="1">
             <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="Load">رفرش</MudButton>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddBranch">افزودن</MudButton>
+            <MudIconButton OnClick="AddBranchWithExcel" Color="Color.Success"
+                           Variant="Variant.Filled"
+                           Size="Size.Medium"
+                           Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
         </MudStack>
     </MudStack>
 
@@ -91,7 +98,7 @@
     private List<BranchesViewModel> _branches = new();
 
     protected override async Task OnInitializedAsync() {
-        
+
         await Load();
     }
 
@@ -149,7 +156,7 @@
 
     private async Task EditBranch(BranchesViewModel vm)
     {
-   
+
         var upd = new UpdateBranchModel
         {
             Id = vm.Id,
@@ -208,4 +215,79 @@
             }
         }
     }
+    private async Task AddBranchWithExcel(MouseEventArgs args)
+    {
+        var options = new DialogOptions()
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+
+        };
+
+        var dialog = Dialog.Show<BranchExcelDialog>(
+            "عملیات اکسل روی برنچ‌ ها",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+        if (result.Canceled)
+            return;
+
+        if (result.Data is int action)
+        {
+
+            if (action == 1)
+            {
+                var base64 = await BranchService.GetBranchReport();
+                if (string.IsNullOrWhiteSpace(base64))
+                {
+                    await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                    return;
+                }
+
+                var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"گزارش-شعبه ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+                await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+            }
+            if (action == 2)
+            {
+                var base64 = await BranchService.GetSampleFileForDownload();
+                if (string.IsNullOrWhiteSpace(base64))
+                {
+                    await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                    return;
+                }
+
+                var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"دانلود فایل نمونه.xlsx";
+
+
+                await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+            }
+            if (action == 3)
+            {
+
+                await Swal.FireAsync("عملیات", "ایمپورت فایل اکسل با موفقیت انجام شد", SweetAlertIcon.Success);
+                _branches = (await BranchService.GetAllBranches(CancellationToken.None)).ToList();
+                return;
+
+
+            }
+            if (action == 4)
+            {
+
+                await Swal.FireAsync("خطا", "ایمپورت فایل اکسل با خطا مواجه شد", SweetAlertIcon.Error);
+                return;
+
+
+            }
+    }
+}
 }

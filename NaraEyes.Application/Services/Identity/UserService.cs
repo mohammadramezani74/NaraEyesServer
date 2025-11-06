@@ -297,6 +297,47 @@ namespace NaraEyes.Application.Services.Identity
             
                 
         }
+
+        public async Task<string?> GetUserReport(CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<UserViewModel>? list = await AllUsers(cancellationToken);
+
+            using var wb = new ClosedXML.Excel.XLWorkbook();
+            var ws = wb.Worksheets.Add("Supervisions");
+
+            ws.Cell(1, 1).Value = "نام";
+            ws.Cell(1, 2).Value = "نام کاربری";
+            ws.Cell(1, 3).Value = "تلفن همراه";
+            ws.Cell(1, 4).Value = "تاریخ آخرین ورود";
+            ws.Cell(1, 5).Value = "نقش";
+            ws.Cell(1, 6).Value = "فعال";
+            ws.Cell(1, 7).Value = "قفل";
+
+
+            ws.Range("A1:G1").Style.Font.Bold = true;
+
+            var row = 2;
+            foreach (var item in list)
+            {
+                ws.Cell(row, 1).Value = item.FullName;
+                ws.Cell(row, 2).Value = item.UserName;
+                ws.Cell(row, 3).Value = item.PhoneNumber;
+                ws.Cell(row, 4).Value = item.LastLoginDate;
+                ws.Cell(row, 5).Value = item.Role;
+                ws.Cell(row, 6).Value = item.IsActive?"فعال":"غیر فعال";
+                ws.Cell(row, 7).Value = item.IsLocked?"قفل شده":"باز";
+                row++;
+            }
+
+
+            ws.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            return base64;
+        }
     }
 }
 

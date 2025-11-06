@@ -1,4 +1,5 @@
-﻿using NaraEyes.Application.Contracts.Models.Basic;
+﻿using Microsoft.AspNetCore.Components.Forms;
+using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Domain.Entities.Base;
 using System;
 using System.Collections.Generic;
@@ -15,5 +16,8 @@ namespace NaraEyes.Application.Contracts.Interfaces.Base
         Task<OperationResult>CreateBranchAsync(CreateBranchModel command,CancellationToken cancellationToken);
         Task<OperationResult> UpdateBranchAsync(UpdateBranchModel command,CancellationToken cancellationToken);
         Task<OperationResult> DeleteBranchAsync(Guid Id, CancellationToken cancellationToken);
+        Task<bool> AddBranchWithExcel(IBrowserFile file, CancellationToken cancellationToken = default);
+        Task<string?> GetSampleFileForDownload(CancellationToken cancellationToken = default);
+        Task<string?> GetBranchReport(CancellationToken cancellationToken = default);
     }
 }

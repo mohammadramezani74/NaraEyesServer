@@ -16,6 +16,7 @@ namespace NaraEyes.Application.Abstraction.Identity
         Task<OperationResult> CreateRoleClaimsAsync(Guid RoleId, List<string> Claims, CancellationToken cancellationToken = default(CancellationToken));
         Task<OperationResult> DeleteRoleClaimsAsync(Guid roleId, string claimName, CancellationToken cancellationToken = default(CancellationToken));
         Task<List<GetRolesResponse>> GetRoles(string? search, CancellationToken cancellationToken = default(CancellationToken));
+        Task<string?> GetRoleReport(CancellationToken cancellationToken = default);
         Task<UserRolesResponse[]> GetRolesByUserId(Guid UserId, CancellationToken cancellationToken = default(CancellationToken));
         Task<OperationResult> AddUserToRole(Guid RoleId, Guid UserId, CancellationToken cancellationToken = default(CancellationToken));
         Task<List<string>> GetClaims(Guid RoleId, CancellationToken cancellationToken = default(CancellationToken));

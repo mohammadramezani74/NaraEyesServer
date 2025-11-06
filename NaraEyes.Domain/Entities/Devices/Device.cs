@@ -15,6 +15,7 @@ namespace NaraEyes.Domain.Entities.Devices
         public int? Code { get; private set; }
         public string Ip { get; private set; }
         public string? Model { get; private set; }
+        public bool AgentStatus { get; set; }
         public DateTime InstallationDate { get; private set; }
         public string? Address { get; private set; }
         public string? SerialNo { get; private set; }
@@ -40,6 +41,10 @@ namespace NaraEyes.Domain.Entities.Devices
         public void SetErrorMode()
         {
             Mode = DeviceMode.Error;
+        }
+        public void SetStatus(DeviceMode mode)
+        {
+            Mode = mode;
         }
         public void SetWarningMode()
         {
@@ -68,7 +73,7 @@ namespace NaraEyes.Domain.Entities.Devices
         }
         public void SetOffline()
         {
-            Mode= DeviceMode.Offline;
+           AgentStatus=false;
         }
         public void UpdateIdentity(int? code, string ip, string? model, string? serialNo)
         {
@@ -153,7 +158,11 @@ namespace NaraEyes.Domain.Entities.Devices
 
 
 
-
+        public void SetAgentOffLine()
+        {
+            AgentStatus = false;
+            ModifiedDate = DateTime.Now;
+        }
         public static Device RegisterNew(
     int? code,
     string ip,
@@ -165,10 +174,43 @@ namespace NaraEyes.Domain.Entities.Devices
             var d = new Device();
             d.ApplyRegistration(code, ip, model, serialNo, agentVersion);
             d.IsActive = true;
-            d.Mode = DeviceMode.Offline;               
+            d.Mode = DeviceMode.Supervisor;               
             d.InstallationDate = DateTime.Now;
             d.Description ??= string.Empty;
             d.CreateDate = DateTime.Now;
+            return d;
+        }
+        public static Device RegisterNewDev(
+int? code,
+string ip,
+string model,
+string? serialNo,
+string? address,
+decimal? longitude,
+decimal? latitude,
+string? Description,
+Guid branchId,
+string mobileNo
+
+)
+        {
+            var d = new Device();
+            d.Ip = ip;
+            d.Code = code;
+            d.Model = model;
+            d.SerialNo= serialNo;
+            d.IsActive = true;
+            d.Mode = DeviceMode.Supervisor;
+            d.InstallationDate = DateTime.Now;
+            d.Description ??= string.Empty;
+            d.CreateDate = DateTime.Now;
+            d.Address = address;
+            d.Longitude = longitude;
+            d.Latitude = latitude;
+            d.BranchId = branchId;
+            d.MobileNo = mobileNo;
+            d.IsActive = true;
+            
             return d;
         }
 
@@ -190,8 +232,8 @@ namespace NaraEyes.Domain.Entities.Devices
             IsActive = true;
             LastHeartbeat = DateTime.Now;
 
-            if (Mode == DeviceMode.Offline)
-                Mode = DeviceMode.InService;
+            if (AgentStatus is false)
+               AgentStatus=true;
         }
         private void ApplyRegistration(
         int? code,
@@ -215,8 +257,7 @@ namespace NaraEyes.Domain.Entities.Devices
             if (!IsActive) IsActive = true;
 
   
-            if (Mode == DeviceMode.Offline)
-                Mode = DeviceMode.Online;
+       if(AgentStatus is false) AgentStatus=true;
         }
 
 
@@ -226,7 +267,7 @@ namespace NaraEyes.Domain.Entities.Devices
         public void Deactivate()
         {
             IsActive = false;
-            Mode = DeviceMode.Offline;
+           AgentStatus = false;
         }
 
         // ====== Version / Identity Changes ======

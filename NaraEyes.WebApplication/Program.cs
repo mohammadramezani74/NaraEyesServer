@@ -40,8 +40,6 @@ builder.Services.RegisterPersistenceServices(builder.Configuration)
     .RegisterInfraStructureServices(builder.Configuration)
     .RegisterApplicationServices();
 
-builder.Services.AddHttpContextAccessor();
-
 builder.Services.AddMemoryCache();
 
 var app = builder.Build();
@@ -125,6 +123,17 @@ app.MapPost("/api/device/SubmitStatus", async (
 {
     var res = await service.SubmitOrUpdateModulesStatus(
      req,
+        ct);
+
+    return Results.Ok(res);
+});
+app.MapPost("/api/device/AgentMode", async (
+  IpModel req,
+    IDeviceMetrics service,
+    CancellationToken ct) =>
+{
+    var res = await service.UpdateAgentStatus(
+     req.Ip,
         ct);
 
     return Results.Ok(res);

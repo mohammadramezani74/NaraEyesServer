@@ -31,9 +31,10 @@ namespace NaraEyes.Application.Services.Devices
         private readonly IHeartbeatThrottler _heartbeat;
         private readonly IDeviceSignalHub _signals;
         private readonly ILogger<DevicePollingService> _logger;
+        private readonly ICommandDispatchState _dispatchState;
         private readonly ConcurrentDictionary<string, ConcurrentQueue<OutBoxDeviceMessage>> _hot = new();
 
-        public DevicePollingService(IOutboxService outBoxService, IInboxService inBoxService, IDeviceService deviceService, ICommandAwaiter await, IAckAwaiter ackAwaiter, IInBoxBatchWriter inboxWriter, IHeartbeatThrottler heartbeat, IDeviceSignalHub signals, ILogger<DevicePollingService> logger)
+        public DevicePollingService(IOutboxService outBoxService, IInboxService inBoxService, IDeviceService deviceService, ICommandAwaiter await, IAckAwaiter ackAwaiter, IInBoxBatchWriter inboxWriter, IHeartbeatThrottler heartbeat, IDeviceSignalHub signals, ILogger<DevicePollingService> logger, ICommandDispatchState dispatchState)
         {
             _outBoxService = outBoxService;
             _inBoxService = inBoxService;
@@ -44,6 +45,7 @@ namespace NaraEyes.Application.Services.Devices
             _heartbeat = heartbeat;
             _signals = signals;
             _logger = logger;
+            _dispatchState = dispatchState;
         }
         public async Task<PollResponse> PollAsync(string deviceIp, List<InBoxDeviceMessage>? reports, CancellationToken ct)
         {
@@ -58,84 +60,7 @@ namespace NaraEyes.Application.Services.Devices
                 {
                     msg.DeviceIp = key;
 
-                    try
-                    {
-                        switch (msg.MessageType)
-                        {
-                            case MessageType.ScreenshotAck:
-                                {
-                                    var pl = JsonSerializer.Deserialize<ScreenshotAckPayload>(msg.Payload);
-                                    if (pl is not null && pl.CommandId != Guid.Empty && !string.IsNullOrEmpty(pl.DataBase64))
-                                    {
-                                        var bytes = Convert.FromBase64String(pl.DataBase64);
-                                        _await.TrySetResult(pl.CommandId, bytes);
-                                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-                                    }
-                                    break;
-                                }
-                            case MessageType.EJournal:
-                                {
-                                    var pl = JsonSerializer.Deserialize<JournalAckPayload>(msg.Payload);
-                                    if (pl != null && pl.CommandId != Guid.Empty)
-                                    {
-                                        var bytes = string.IsNullOrEmpty(pl.DataBase64) ? Array.Empty<byte>() : Convert.FromBase64String(pl.DataBase64);
-                                        _await.TrySetResult(pl.CommandId, bytes);
-                                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-                                    }
-                                    else if (pl != null && pl.CommandId == Guid.Empty)
-                                    {
-                                        var bytes = string.IsNullOrEmpty(pl.DataBase64) ? null : Convert.FromBase64String(pl.DataBase64);
-                                        await _outBoxService.MarkAutoJournalProccessor(msg.DeviceIp, bytes, ct);
-                                    }
-                                    break;
-                                }
-                            case MessageType.CommandAck:
-                                {
-                                    var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
-                                    if (pl is not null && pl.CommandId != Guid.Empty)
-                                    {
-                                        _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck { CommandId = pl.CommandId, Accepted = pl.Accepted, Message = pl.Message });
-                                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-                                    }
-                                    toStore.Add(msg);
-                                    break;
-                                }
-                            case MessageType.ErrorReport:
-                                {
-                                    using var doc = JsonDocument.Parse(msg.Payload);
-                                    if (doc.RootElement.TryGetProperty("CommandId", out var idProp) &&
-                                        Guid.TryParse(idProp.GetString(), out var cmdId) && cmdId != Guid.Empty)
-                                    {
-                                        await _outBoxService.MarkCommandAsFailedAsync(cmdId, msg.DeviceIp, ct);
-                                    }
-                                    break;
-                                }
-                            case MessageType.FileUpload:
-                                {
-                                    var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
-                                    if (pl is not null && pl.CommandId != Guid.Empty)
-                                    {
-                                        _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck { CommandId = pl.CommandId, Accepted = pl.Accepted, Message = pl.Message });
-                                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-                                    }
-                                    break;
-                                }
-                            case MessageType.Group:
-                                {
-                                    var pl = JsonSerializer.Deserialize<SendGroupInstructionModel>(msg.Payload);
-                                    await _outBoxService.MarkCommandGroupProcessedAsync(pl, ct);
-                                    break;
-                                }
-                            default:
-                                toStore.Add(msg);
-                                break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Report handling failed for {ip} type={type}", msg.DeviceIp, msg.MessageType);
-                        await _outBoxService.MarkReportFailedSafeAsync(msg, ct);
-                    }
+                    await ProcessAgentReport(toStore, msg, ct);
                 }
 
                 if (toStore.Count > 0)
@@ -146,184 +71,137 @@ namespace NaraEyes.Application.Services.Devices
             var cmds = TryDequeueHot(deviceIp); // داخلش خودش key می‌کنه
             if (cmds?.Count > 0)
                 return new PollResponse { ServerTime = DateTime.UtcNow, Commands = cmds };
+            var now = DateTime.Now;
+            // ================== COLD PATH 1: فقط اگر لازم است، DB ==================
+            List<OutBoxDeviceMessage> pending = new();
 
-            // --- cold path: DB once ---
-            var pending = await _outBoxService.GetPendingCommandsAsync(key, ct);
-            if (pending.Any())
-                return new PollResponse { ServerTime = DateTime.UtcNow, Commands = pending };
-
-            // --- wait for signal ---
-            var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 50));
-            var signaled = await _signals.WaitAsync(key, TimeSpan.FromSeconds(30) + jitter, ct);
-            _logger.LogDebug("Wait completed. signaled={sig} key={key}", signaled, key);
-
-            cmds = TryDequeueHot(deviceIp);
-            if (cmds?.Count > 0)
-                return new PollResponse { ServerTime = DateTime.UtcNow, Commands = cmds };
-
-            if (signaled)
+            if (_dispatchState.ShouldCheckDatabase(key, now))
             {
-                pending = await _outBoxService.GetPendingCommandsAsync(key, ct);
+               pending = await _outBoxService.GetPendingCommandsAsync(key, ct);
+                _dispatchState.MarkCommandsLoadedFromDb(key, pending.Any(), now);
+
+                if (pending.Any())
+                {
+                    return new PollResponse
+                    {
+                        ServerTime = now,
+                        Commands = pending
+                    };
+                }
             }
 
-            return new PollResponse { ServerTime = DateTime.UtcNow, Commands = pending };
+            // ================== WAIT FOR SIGNAL (long-poll) ==================
+            var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 50));
+            var signaled = await _signals.WaitAsync(key, TimeSpan.FromSeconds(30) + jitter, ct);
+
+            // ================== FAST PATH 2: دوباره hot queue چک کن ==================
+            cmds = TryDequeueHot(deviceIp);
+            if (cmds?.Count > 0)
+            {
+                return new PollResponse
+                {
+                    ServerTime = DateTime.UtcNow,
+                    Commands = cmds
+                };
+            }
+
+            // ================== COLD PATH 2: اگر signal بود، DB (با hint) ==================
+            if (signaled && _dispatchState.ShouldCheckDatabase(key, now))
+            {
+                pending = await _outBoxService.GetPendingCommandsAsync(key, ct);
+                _dispatchState.MarkCommandsLoadedFromDb(key, pending.Any(), DateTime.UtcNow);
+            }
+
+            // اگر هنوز هم چیزی در pending نیست، لیست خالی برمی‌گردد
+            return new PollResponse
+            {
+                ServerTime = DateTime.UtcNow,
+                Commands = pending
+            };
         }
-        //public async Task<PollResponse> PollAsync(string deviceIp, List<InBoxDeviceMessage>? reports, CancellationToken ct)
-        //{
-        //    var key = ToolsDate.Key(deviceIp);
-        //    await _heartbeat.UpdateAsync(deviceIp, ct);
 
+        private async Task ProcessAgentReport(List<InBoxDeviceMessage> toStore, InBoxDeviceMessage msg, CancellationToken ct)
+        {
+            try
+            {
+                switch (msg.MessageType)
+                {
+                    case MessageType.ScreenshotAck:
+                        {
+                            var pl = JsonSerializer.Deserialize<ScreenshotAckPayload>(msg.Payload);
+                            if (pl is not null && pl.CommandId != Guid.Empty && !string.IsNullOrEmpty(pl.DataBase64))
+                            {
+                                var bytes = Convert.FromBase64String(pl.DataBase64);
+                                _await.TrySetResult(pl.CommandId, bytes);
+                                await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
+                            }
+                            break;
+                        }
+                    case MessageType.EJournal:
+                        {
+                            var pl = JsonSerializer.Deserialize<JournalAckPayload>(msg.Payload);
+                            if (pl != null && pl.CommandId != Guid.Empty)
+                            {
+                                var bytes = string.IsNullOrEmpty(pl.DataBase64) ? Array.Empty<byte>() : Convert.FromBase64String(pl.DataBase64);
+                                _await.TrySetResult(pl.CommandId, bytes);
+                                await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
+                            }
+                            else if (pl != null && pl.CommandId == Guid.Empty)
+                            {
+                                var bytes = string.IsNullOrEmpty(pl.DataBase64) ? null : Convert.FromBase64String(pl.DataBase64);
+                                await _outBoxService.MarkAutoJournalProccessor(msg.DeviceIp, bytes, ct);
+                            }
+                            break;
+                        }
+                    case MessageType.CommandAck:
+                        {
+                            var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
+                            if (pl is not null && pl.CommandId != Guid.Empty)
+                            {
+                                _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck { CommandId = pl.CommandId, Accepted = pl.Accepted, Message = pl.Message });
+                                await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
+                            }
+                            toStore.Add(msg);
+                            break;
+                        }
+                    case MessageType.ErrorReport:
+                        {
+                            using var doc = JsonDocument.Parse(msg.Payload);
+                            if (doc.RootElement.TryGetProperty("CommandId", out var idProp) &&
+                                Guid.TryParse(idProp.GetString(), out var cmdId) && cmdId != Guid.Empty)
+                            {
+                                await _outBoxService.MarkCommandAsFailedAsync(cmdId, msg.DeviceIp, ct);
+                            }
+                            break;
+                        }
+                    case MessageType.FileUpload:
+                        {
+                            var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
+                            if (pl is not null && pl.CommandId != Guid.Empty)
+                            {
+                                _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck { CommandId = pl.CommandId, Accepted = pl.Accepted, Message = pl.Message });
+                                await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
+                            }
+                            break;
+                        }
+                    case MessageType.Group:
+                        {
+                            var pl = JsonSerializer.Deserialize<SendGroupInstructionModel>(msg.Payload);
+                            await _outBoxService.MarkCommandGroupProcessedAsync(pl, ct);
+                            break;
+                        }
+                    default:
+                        toStore.Add(msg);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                //_logger.LogError(ex, "Report handling failed for {ip} type={type}", msg.DeviceIp, msg.MessageType);
+                await _outBoxService.MarkReportFailedSafeAsync(msg, ct);
+            }
+        }
 
-        //    if (reports is { Count: > 0 })
-        //    {
-        //        var toStore = new List<InBoxDeviceMessage>(reports.Count);
-        //        foreach (var msg in reports)
-        //        {
-        //            msg.DeviceIp = deviceIp;
-
-        //            if (msg.MessageType == MessageType.ScreenshotAck)
-        //            {
-        //                try
-        //                {
-        //                    var pl = JsonSerializer.Deserialize<ScreenshotAckPayload>(msg.Payload);
-        //                    if (pl is not null && pl.CommandId != Guid.Empty && !string.IsNullOrEmpty(pl.DataBase64))
-        //                    {
-        //                        var bytes = Convert.FromBase64String(pl.DataBase64);
-        //                        _await.TrySetResult(pl.CommandId, bytes);
-        //                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-        //                    }
-        //                }
-        //                catch { }
-        //                continue;
-        //            }
-
-        //            if (msg.MessageType == MessageType.EJournal)
-        //            {
-        //                try
-        //                {
-        //                    var pl = JsonSerializer.Deserialize<JournalAckPayload>(msg.Payload);
-
-
-
-        //                    if (pl != null && pl.CommandId != Guid.Empty)
-        //                    {
-        //                        var bytes = !string.IsNullOrEmpty(pl.DataBase64)
-        //                          ? Convert.FromBase64String(pl.DataBase64)
-        //                          : Array.Empty<byte>();
-
-
-
-        //                        _await.TrySetResult(pl.CommandId, bytes);
-
-
-        //                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-        //                    }
-        //                    else if (pl != null && pl.CommandId == Guid.Empty)
-        //                    {
-        //                        var bytes = !string.IsNullOrEmpty(pl.DataBase64)
-        //                          ? Convert.FromBase64String(pl.DataBase64)
-        //                          : null;
-
-        //                        await _outBoxService.MarkAutoJournalProccessor(msg.DeviceIp, bytes, ct);
-        //                    }
-        //                }
-        //                catch (Exception ex)
-        //                {
-
-        //                    Console.WriteLine($"Error processing EJournal for Device IP {msg.DeviceIp}: {ex.Message}");
-        //                }
-        //                continue;
-        //            }
-
-        //            if (msg.MessageType == MessageType.CommandAck)
-        //            {
-        //                try
-        //                {
-        //                    var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
-        //                    if (pl is not null && pl.CommandId != Guid.Empty)
-        //                    {
-        //                        _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck
-        //                        {
-        //                            CommandId = pl.CommandId,
-        //                            Accepted = pl.Accepted,
-        //                            Message = pl.Message
-        //                        });
-        //                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-        //                    }
-        //                }
-        //                catch { }
-
-        //                toStore.Add(msg);
-        //                continue;
-        //            }
-        //            if (msg.MessageType == MessageType.ErrorReport)
-        //            {
-        //                try
-        //                {
-        //                    // payload شما قبلاً به شکل new { CommandId, Error, Time } بود
-        //                    // پس یک DTO ساده بساز یا از JsonDocument استفاده کن
-        //                    using var doc = JsonDocument.Parse(msg.Payload);
-        //                    if (doc.RootElement.TryGetProperty("CommandId", out var idProp) &&
-        //                        Guid.TryParse(idProp.GetString(), out var cmdId) &&
-        //                        cmdId != Guid.Empty)
-        //                    {
-        //                        var errText = doc.RootElement.TryGetProperty("Error", out var eProp) ? eProp.GetString() : "agent error";
-        //                        await _outBoxService.MarkCommandAsFailedAsync(cmdId,msg.DeviceIp, ct);
-        //                    }
-        //                }
-        //                catch { /* لاگ */ }
-        //                continue;
-        //            }
-        //            if (msg.MessageType == MessageType.FileUpload)
-        //            {
-        //                try
-        //                {
-        //                    var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
-        //                    _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck
-        //                    {
-        //                        CommandId = pl.CommandId,
-        //                        Accepted = pl.Accepted,
-        //                        Message = pl.Message
-        //                    });
-        //                    await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-
-        //                }
-        //                catch { }
-        //                continue;
-        //            }
-        //            if (msg.MessageType == MessageType.Group)
-        //            {
-        //                var pl = JsonSerializer.Deserialize<SendGroupInstructionModel>(msg.Payload);
-        //                await _outBoxService.MarkCommandGroupProcessedAsync(pl, ct);
-        //            }
-
-        //            toStore.Add(msg);
-        //        }
-        //        if (toStore.Count > 0)
-        //            _inboxWriter.Enqueue(deviceIp, toStore);
-        //    }
-        //    var cmds = TryDequeueHot(key);
-        //    if (cmds != null && cmds.Count > 0)
-        //        return new PollResponse { ServerTime = DateTime.UtcNow, Commands = cmds };
-
-        //    var pending = await _outBoxService.GetPendingCommandsAsync(key, ct);
-        //    if (pending.Any())
-        //        return new PollResponse { ServerTime = DateTime.UtcNow, Commands = pending };
-
-        //    var t0 = DateTime.Now;
-        //    var jitter = TimeSpan.FromMilliseconds(Random.Shared.Next(0, 50));
-        //    var res=  await _signals.WaitAsync(key, TimeSpan.FromSeconds(30)+jitter, ct);
-
-        //    var waitedMs = (DateTime.Now - t0).TotalMilliseconds;
-        //    _logger.LogCritical("Waited {ms} ms; signaled={sig}; key={key}", waitedMs, res, key);
-        //    cmds = TryDequeueHot(key);
-
-        //    if (cmds != null && cmds.Count > 0)
-        //        return new PollResponse { ServerTime = DateTime.UtcNow, Commands = cmds };
-
-        //    pending = await _outBoxService.GetPendingCommandsAsync(key, ct);
-        //    return new PollResponse { ServerTime = DateTime.UtcNow, Commands = pending };
-        //}
         public async Task EnqueueCommandAsync(string deviceIp, OutBoxDeviceMessage cmd, CancellationToken ct)
         {
             var key = ToolsDate.Key(deviceIp);
@@ -332,7 +210,9 @@ namespace NaraEyes.Application.Services.Devices
 
             _hot.GetOrAdd(key, _ => new ConcurrentQueue<OutBoxDeviceMessage>()).Enqueue(cmd);
 
+            _dispatchState.MarkCommandEnqueued(key);
             await _signals.Pulse(key);
+
             _logger.LogInformation("PULSE sent for key={key}, cmdId={id}", key, cmd.Id); // 👈 بیدار کردن فوری long-poll
             Console.WriteLine("PULSE sent for key={key}, cmdId={id}", key, cmd.Id);
         }
@@ -345,78 +225,7 @@ namespace NaraEyes.Application.Services.Devices
                 return new List<OutBoxDeviceMessage> { cmd };
             return null;
         }
-        private static string Key(string s) => (s ?? "").Trim().ToLowerInvariant();
-        //public async Task<PollResponse> PollAsync(string deviceIp, List<InBoxDeviceMessage>? reports, CancellationToken ct)
-        //{
-        //    await _deviceService.UpdateHeartbeatAsync(deviceIp, ct);
-
-        //    if (reports is { Count: > 0 })
-        //    {
-        //        foreach (var msg in reports)
-        //        {
-        //            msg.DeviceIp = deviceIp;
-
-        //            if (msg.MessageType == MessageType.ScreenshotAck)
-        //            {
-        //                try
-        //                {
-        //                    var pl = JsonSerializer.Deserialize<ScreenshotAckPayload>(msg.Payload);
-        //                    if (pl is not null && pl.CommandId != Guid.Empty && !string.IsNullOrEmpty(pl.DataBase64))
-        //                    {
-        //                        var bytes = Convert.FromBase64String(pl.DataBase64);
-        //                        _await.TrySetResult(pl.CommandId, bytes);
-        //                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-        //                    }
-        //                }
-        //                catch { /* optional: log */ }
-        //                continue; // اسکرین‌شات ذخیره نشود
-        //            }
-        //            if (msg.MessageType == MessageType.CommandAck)
-        //            {
-
-        //                    var pl = JsonSerializer.Deserialize<CommandAckPayload>(msg.Payload);
-        //                    if (pl is not null && pl.CommandId != Guid.Empty)
-        //                    {
-        //                        _ackAwaiter.TrySetAck(pl.CommandId, new CommandAck
-        //                        {
-        //                            CommandId = pl.CommandId,
-        //                            Accepted = pl.Accepted,
-        //                            Message = pl.Message
-        //                        });
-
-        //                        await _outBoxService.MarkCommandAsProcessedAsync(pl.CommandId, ct);
-        //                    }
-
-
-        //                 }
-
-
-
-
-        //            await _inBoxService.StoreMessageAsync(msg, ct);
-        //        }
-        //    }
-
-        //    var pending = await _outBoxService.GetPendingCommandsAsync(deviceIp, ct);
-        //    if (pending.Any())
-        //        return new PollResponse { ServerTime = DateTime.UtcNow, Commands = pending };
-
-        //    // ✅ long-poll تا 30s با چک‌های سریع‌تر (250ms)
-        //    var timeout = TimeSpan.FromSeconds(30);
-        //    var start = DateTime.UtcNow;
-
-        //    while (!ct.IsCancellationRequested && DateTime.UtcNow - start < timeout)
-        //    {
-        //        pending = await _outBoxService.GetPendingCommandsAsync(deviceIp, ct);
-        //        if (pending.Any())
-        //            return new PollResponse { ServerTime = DateTime.UtcNow, Commands = pending };
-
-        //        await Task.Delay(250, ct); 
-        //    }
-
-        //    return new PollResponse { ServerTime = DateTime.UtcNow, Commands = new List<OutBoxDeviceMessage>() };
-        //}
-
+    
 
     }
 }

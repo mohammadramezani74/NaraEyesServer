@@ -3,11 +3,13 @@ using NaraEyes.Application.Contracts.Models.Modules.Idc;
 using NaraEyes.Application.Contracts.Models.Modules.Pin;
 using NaraEyes.Application.Contracts.Models.Modules.Ptr;
 using NaraEyes.Application.Contracts.Models.Modules.SIU;
+using NaraEyes.Domain.Enumerations;
 
 namespace NaraEyes.Application.Contracts.Models.Modules.CDM
 {
     public class DeviceMuduleStatusCommand
     {
+        public DeviceMode Mode { get; set; }
         public string DeviceIp { get; set; } = null!;
         public CdmStatusDto? CdmStatus { get; set; }
         public IdcStatusDto IdcStatus { get; set; }
@@ -17,4 +19,4 @@ namespace NaraEyes.Application.Contracts.Models.Modules.CDM
         public SiuStatusModel SiuStatus { get; set; }
         public List<CashUnitModel> Cashunit { get; set; } = new();
     }
-}
+    }

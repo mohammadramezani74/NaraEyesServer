@@ -17,5 +17,6 @@ namespace NaraEyes.Application.Contracts.Interfaces.Identity
         Task<OperationResult>DeleteUserAsync(Guid userId, CancellationToken cancellationToken);
         Task<OperationResult> ChangePassword(ChangePasswordModel command, CancellationToken cancellationToken);
         Task SigninUser(string username, CancellationToken cts = default);
+        Task<string?> GetUserReport(CancellationToken cancellationToken = default);
     }
 }

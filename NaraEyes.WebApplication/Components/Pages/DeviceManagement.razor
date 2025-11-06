@@ -1,5 +1,6 @@
 ﻿@page "/devices"
 @using System.Threading
+@using Microsoft.AspNetCore.Authorization
 @using MudBlazor
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Interfaces.Devices
@@ -16,7 +17,7 @@
 @inject IJSRuntime JS
 @inject IUserService userService
 @inject NavigationManager Nav
-
+@attribute [Authorize(Roles = "مدیریت استان,مدیریت مانیتورینگ,مدیریت مرکزی")]
 
 <MudTable T="DeviceViewModel"
           ServerData="ServerReload"
@@ -77,7 +78,8 @@
     </ToolBarContent>
 
     <HeaderContent>
-        <MudTh><MudTableSortLabel SortLabel="status"   T="DeviceViewModel">وضعیت</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortLabel="status"   T="DeviceViewModel">وضعیت دستگاه</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortLabel="status" T="DeviceViewModel">وضعیت ایجنت</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="name"     T="DeviceViewModel">نام دستگاه</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="ip"       T="DeviceViewModel">آی‌پی</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="branch"   T="DeviceViewModel">شعبه</MudTableSortLabel></MudTh>
@@ -94,6 +96,23 @@
                 @LocalizeStatus(context.Status)
             </MudChip>
         </MudTd>
+        <MudTd DataLabel=" وضعیت ایجنت">
+            <MudText Typo="Typo.body2" Class="font-semibold">
+                @if (context.DeviceAgent)
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="agent-dot agent-dot--on"></span>
+                        <MudText Typo="Typo.body2" Class="font-semibold text-success"></MudText>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="agent-dot agent-dot--off"></span>
+                        <MudText Typo="Typo.body2" Class="font-semibold text-secondary"> </MudText>
+                    </div>
+                }
+            </MudText></MudTd>
         <MudTd DataLabel="نام دستگاه"><MudText Typo="Typo.body2" Class="font-semibold">@context.DisplayName</MudText></MudTd>
         <MudTd DataLabel="آی‌پی">@context.Ip</MudTd>
         <MudTd DataLabel="شعبه">@context.Branch</MudTd>
@@ -170,20 +189,12 @@
       a.remove();
     };
 
-    };
+    
 </script>
 
-<style>
-    /* تینت کمرنگ ردیف‌ها بر اساس وضعیت */
-    .mud-table-body .row-inservice { background: rgba(25,118,210,.06); }   /* آبی */
-    .mud-table-body .row-warning  { background: rgba(251,192,45,.10); }    /* زرد */
-    .mud-table-body .row-error    { background: rgba(229,57,53,.08); }     /* قرمز */
-    .mud-table-body .row-offline  { background: rgba(97,97,97,.06); }      /* خاکستری */
-    .mud-table-body tr:hover { filter: brightness(0.99); }
-</style>
+
 
 @code {
-    private List<DeviceViewModel> Devices = new();
     private MudTable<DeviceViewModel> table;
 
     // فیلترها
@@ -278,10 +289,12 @@
 
     private Color GetStatusColor(DeviceMode s) => s switch
     {
-        DeviceMode.InService => Color.Primary,
+        DeviceMode.InService => Color.Success,
         DeviceMode.warning   => Color.Warning,
         DeviceMode.Error     => Color.Error,
         DeviceMode.Offline   => Color.Dark,
+        DeviceMode.Supervisor => Color.Secondary,
+        DeviceMode.Online => Color.Surface,
         _ => Color.Default
     };
 
@@ -291,11 +304,21 @@
         DeviceMode.warning   => "هشدار",
         DeviceMode.Error     => "خطا",
         DeviceMode.Offline   => "آفلاین",
+        DeviceMode.Supervisor =>"خارج از سرویس",
+        DeviceMode.Online => "آنلاین",
         _ => s.ToString()
     };
 
     // ---- Actions (فعلاً Snackbar؛ بعداً به IDeviceControlService وصل می‌کنیم) ----
-    private void UpdateStatuses(DeviceViewModel d)  => Snackbar.Add("بروزرسانی وضعیت‌ها: " + d.DisplayName, Severity.Info);
+    private async Task UpdateStatuses(DeviceViewModel d)
+    {
+     var result=   await DeviceService.GetForcesStatus(d.Ip);
+        if (result)
+            Snackbar.Add($"بروزرسانی دستگاه {d.Ip} با موفقیت انجام شد", Severity.Success);
+        else
+            Snackbar.Add("دستگاه موفق به بروزرسانی وضعیت نشد.", Severity.Warning);
+     
+    }
     private void Screenshot2(DeviceViewModel d)      => Snackbar.Add("اسکرین‌شات: " + d.DisplayName, Severity.Success);
     private async Task Screenshot(DeviceViewModel d)
     {

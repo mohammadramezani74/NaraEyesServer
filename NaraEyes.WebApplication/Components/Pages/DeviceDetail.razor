@@ -1,4 +1,5 @@
 ﻿@page "/devices/{ip}"
+@using Microsoft.AspNetCore.Authorization
 @using MudBlazor
 @using NaraEyes.Application.Contracts.Interfaces.Devices
 @using NaraEyes.Application.Contracts.Interfaces.Modules
@@ -12,7 +13,7 @@
 @inject IDeviceService service
 @inject IModuleServices _moduleServices
 @inject IDialogService Dialog
-
+@attribute [Authorize(Roles = "مدیریت مانیتورینگ,مدیریت مرکزی")]
 
 <PageTitle>Device Detail</PageTitle>
 

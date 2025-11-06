@@ -57,7 +57,7 @@ namespace NaraEyes.Application.Services.Metrics
             DeviceMode mode = DeviceMode.Supervisor;
             var op = new OperationResult();
             const int MaxSnapshots = 10;
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
 
             Device? atm = await _uow.Devices.Include(x => x.Modules)
                 .Include(x=>x.CashUnits)
@@ -226,17 +226,11 @@ namespace NaraEyes.Application.Services.Metrics
                 }
 
             }
-            if (haveError)
-            {
-                atm.SetErrorMode();
-                mode = DeviceMode.Error;
-            }
-            else
-            {
-                atm.SetOnlineMode();
-                mode = DeviceMode.Online;
-            }
-                await _uow.SaveChangesAsync(cancellationToken);
+
+            atm.SetStatus(command.Mode);
+            mode = command.Mode;
+
+            await _uow.SaveChangesAsync(cancellationToken);
             await _hubContext.Clients.All.SendAsync("ReceiveDeviceStatusUpdate", atm.Ip, mode);
 
             return op.succedded();
@@ -339,9 +333,15 @@ namespace NaraEyes.Application.Services.Metrics
             return IsError(newStatus);
         }
 
-
-
-
-
+        public async Task<OperationResult> UpdateAgentStatus(string Ip, CancellationToken cancellationToken = default)
+        {
+            var OP= new OperationResult();
+            Device? atm = await _uow.Devices.Where(x=>x.Ip==Ip).FirstOrDefaultAsync(cancellationToken);
+            if (atm != null) {
+                atm.SetAgentOffLine();
+                await _uow.SaveChangesAsync(cancellationToken);
+            }
+            return OP.succedded();
+        }
     }
 }

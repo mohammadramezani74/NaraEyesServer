@@ -1,4 +1,5 @@
 ﻿@page "/management"
+@using CurrieTechnologies.Razor.SweetAlert2
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using MudBlazor
@@ -6,13 +7,15 @@
 @using NaraEyes.Application.Contracts.Models.Basic
 @using NaraEyes.WebApplication.Components.Dialogs
 @using NaraEyes.WebApplication.Components.Pages.Administration
-@attribute [Authorize]
+@attribute [Authorize(Roles = "مدیریت مرکزی")]
 @rendermode InteractiveServer
 
 @inject AuthenticationStateProvider Auth
 @inject IDialogService Dialog
 @inject ISnackbar Snackbar
 @inject ISupervisionStateService SupervisionStateService
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
 
 <MudContainer MaxWidth="MaxWidth.False" Class="p-6">
 
@@ -39,6 +42,10 @@
                     <MudStack Row="true" Spacing="1">
                         <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadSupervisions">رفرش</MudButton>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AddSupervisor">افزودن</MudButton>
+                        <MudIconButton OnClick="AddSupervisionWithExcel" Color="Color.Success"
+                                       Variant="Variant.Filled"
+                                       Size="Size.Medium"
+                                       Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
                     </MudStack>
                 </MudStack>
 
@@ -167,7 +174,7 @@
             if (_tabIndex == value) return;
             _tabIndex = value;
 
-      
+
             switch (value)
             {
                 case 1: _loaded.Branches = true; break;
@@ -352,7 +359,7 @@
         Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
     }
 
- 
+
     // -------- Users
     private bool UserFilter(UserRow u)
         => string.IsNullOrWhiteSpace(searchUser)
@@ -379,7 +386,7 @@
 
     private void CommitUserEdit(object item) => Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
 
-  
+
 
     // -------- Roles
     private bool RoleFilter(RoleRow r)
@@ -434,7 +441,7 @@
 
     private void CommitDeviceEdit(object item) => Snackbar.Add("تغییرات ثبت شد.", Severity.Success);
 
-  
+
 
     private Color StatusColor(string status) =>
         status switch
@@ -445,4 +452,79 @@
             "Offline" => Color.Dark, // یا Color.Error
             _ => Color.Info
         };
+    private async Task AddSupervisionWithExcel(MouseEventArgs args)
+    {
+        var options = new DialogOptions()
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        var parameters = new DialogParameters
+        {
+
+        };
+
+        var dialog = Dialog.Show<ExcelSupervisionDialog>(
+            "عملیات اکسل روی سرپرستی‌ها",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+        if (result.Canceled)
+            return;
+
+        if (result.Data is int action)
+        {
+
+            if (action == 1)
+            {
+                var base64=  await   SupervisionStateService.GetSupervisionReport();
+                if (string.IsNullOrWhiteSpace(base64))
+                {
+                    await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                    return;
+                }
+
+                var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"گزارش-سرپرستی ها-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+
+
+                await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+            }
+            if (action == 2)
+            {
+                var base64 = await SupervisionStateService.GetSampleFileForDownload();
+                if (string.IsNullOrWhiteSpace(base64))
+                {
+                    await Swal.FireAsync("خطا", "فایل تولید نشد.", SweetAlertIcon.Error);
+                    return;
+                }
+
+                var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                var fileName = $"دانلود فایل نمونه.xlsx";
+
+
+                await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
+            }
+            if (action == 3)
+            {
+
+                await Swal.FireAsync("عملیات", "ایمپورت فایل اکسل با موفقیت انجام شد", SweetAlertIcon.Success);
+                await LoadSupervisions();
+                return;
+                
+
+            }
+            if (action ==4)
+            {
+
+                await Swal.FireAsync("خطا", "ایمپورت فایل اکسل با خطا مواجه شد", SweetAlertIcon.Error);
+                return;
+
+
+            }
+        }
+    }
 }

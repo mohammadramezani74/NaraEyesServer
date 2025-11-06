@@ -1,8 +1,11 @@
 ﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Application.Abstraction.Unitofwork;
+using NaraEyes.Application.Contracts.Interfaces.Base;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Devices;
@@ -11,6 +14,7 @@ using NaraEyes.Application.Contracts.Models.Modules.Cam;
 using NaraEyes.Application.Contracts.Models.Modules.CDM;
 using NaraEyes.Application.Contracts.Utilities;
 using NaraEyes.Domain.Entities.Base;
+using NaraEyes.Domain.Entities.BulkOperation.Enums;
 using NaraEyes.Domain.Entities.Devices;
 using NaraEyes.Domain.Enumerations;
 using System;
@@ -32,16 +36,36 @@ namespace NaraEyes.Application.Services.Devices
         private readonly IOutboxService _outbox;
         private readonly ICommandAwaiter _await;
         private readonly IAckAwaiter _ack;
+        private readonly AuthenticationStateProvider auth;
+        private readonly IApplicationUserManager _userManamager;
+        private readonly ICommandDispatchState _dispatchState;
         private static readonly CultureInfo _gregorian = CreateGregorian();
 
-        public DeviceService(IApplicationUnitOfWork uow, ICommandAwaiter await, IOutboxService outbox, IAckAwaiter ack)
+        public DeviceService(IApplicationUnitOfWork uow, ICommandAwaiter await, IOutboxService outbox, IAckAwaiter ack, AuthenticationStateProvider _auth,
+                  IApplicationUserManager userManamager, ICommandDispatchState dispatchState)
         {
             _uow = uow;
             _await = await;
             _outbox = outbox;
             _ack = ack;
+            auth = _auth;
+            _userManamager = userManamager;
+            this._dispatchState = dispatchState;
         }
+        private async Task<Guid?> GetUserId()
+        {
+            var userId = _userManamager.UserId;
+            var state = await auth.GetAuthenticationStateAsync();
+            var user = state.User;
+            var idValue = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
+            if (Guid.TryParse(idValue, out var gid))
+                userId = gid;
+            else
+                userId = null;
+            var type = OperationType.FileSend;
+            return userId;
+        }
         public async Task DeactivateAsync(Guid deviceId, CancellationToken ct)
         {
             var device = await _uow.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, ct);
@@ -98,6 +122,8 @@ namespace NaraEyes.Application.Services.Devices
                     model.newContact.Tel, model.newContact.PhoneNumber,
                     model.newContact.Address, model.newContact.Email);
             }
+            var userid = await GetUserId();
+            entity.ModifiedById = userid;
             entity.ApplyUpdate(model.Code, model.Ip, model.Model, model.InstallationDate,
                 model.Address, model.SerialNo, model.Tel, model.MobileNo, model.BranchId,
                 model.Description, model.Latitude, model.Longitude, model.IsActive, null, null);
@@ -107,6 +133,27 @@ namespace NaraEyes.Application.Services.Devices
 
             try
             {
+                await _uow.SaveChangesAsync(cancellationToken);
+                return op.succedded();
+            }
+            catch (DbUpdateException ex)
+            {
+                return op.Failed($"خطا در به‌روزرسانی دستگاه: {ex.GetBaseException().Message}");
+            }
+        }
+        public async Task<OperationResult> CreateDevice(CreateDeviceViewModel model, CancellationToken cancellationToken = default)
+        {
+            var op = new OperationResult();
+        
+            Device? entity = Device.RegisterNewDev(model.Code, model.Ip, model.Model, model.SerialNo, model.Address, model.Longitude,
+                model.Latitude,model.Description,model.BranchId.Value,model.MobileNo);
+
+            var userid =await GetUserId();
+            entity.CreatedByUserId = userid;
+
+            try
+            {
+                _uow.Devices.Add(entity);
                 await _uow.SaveChangesAsync(cancellationToken);
                 return op.succedded();
             }
@@ -173,21 +220,18 @@ namespace NaraEyes.Application.Services.Devices
             var page = filter.Page <= 0 ? 1 : filter.Page;
             var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 200);
 
-            
-            var query = _uow.Devices
+            // 1) کوئری پایه
+            var baseQuery = _uow.Devices
                 .AsNoTracking()
-                .Include(d => d.Branch)    
+                .Include(d => d.Branch)
                 .Include(d => d.CashUnits)
-                .OrderBy(x => x.Mode == DeviceMode.Error)
-                .ThenBy(x => x.Mode == DeviceMode.warning)
                 .AsQueryable();
-            
 
+            // فیلترها...
             if (!string.IsNullOrWhiteSpace(filter.Search))
             {
                 var s = filter.Search.Trim();
-
-                query = query.Where(d =>
+                baseQuery = baseQuery.Where(d =>
                        EF.Functions.Like(d.Ip, $"%{s}%")
                     || (d.SerialNo != null && EF.Functions.Like(d.SerialNo, $"%{s}%"))
                     || (d.Model != null && EF.Functions.Like(d.Model, $"%{s}%"))
@@ -197,34 +241,37 @@ namespace NaraEyes.Application.Services.Devices
             }
 
             if (filter.Status.HasValue)
-                query = query.Where(d => d.Mode == filter.Status.Value);
+                baseQuery = baseQuery.Where(d => d.Mode == filter.Status.Value);
 
             if (filter.Branch.HasValue)
-                query = query.Where(d => d.BranchId == filter.Branch.Value);
+                baseQuery = baseQuery.Where(d => d.BranchId == filter.Branch.Value);
 
+            // 2) یه کوئری برای total
+            var totalQuery = baseQuery;
+
+            // 3) مرتب‌سازی
             var desc = filter.SortDirection == SortDirectionDto.Descending;
-            query = (filter.SortLabel?.ToLowerInvariant()) switch
+            baseQuery = (filter.SortLabel?.ToLowerInvariant()) switch
             {
-                "status" => desc ? query.OrderByDescending(d => d.Mode) : query.OrderBy(d => d.Mode),
-                "name" => desc ? query.OrderByDescending(d => d.Code).ThenByDescending(d => d.SerialNo).ThenByDescending(d => d.Ip)
-                                  : query.OrderBy(d => d.Code).ThenBy(d => d.SerialNo).ThenBy(d => d.Ip),
-                "ip" => desc ? query.OrderByDescending(d => d.Ip) : query.OrderBy(d => d.Ip),
-                "branch" => desc ? query.OrderByDescending(d => d.Branch!.Name) : query.OrderBy(d => d.Branch!.Name),
-                "seen" => desc ? query.OrderByDescending(d => d.LastHeartbeat)
-                                  : query.OrderBy(d => d.LastHeartbeat),
-                "serial" => desc ? query.OrderByDescending(d => d.SerialNo) : query.OrderBy(d => d.SerialNo),
-                "cash" or "updated" or null or "" => query.OrderBy(d => d.Code),
-                _ => query.OrderBy(d => d.Code)
+                "status" => desc ? baseQuery.OrderByDescending(d => d.Mode) : baseQuery.OrderBy(d => d.Mode),
+                "name" => desc ? baseQuery.OrderByDescending(d => d.Code).ThenByDescending(d => d.SerialNo).ThenByDescending(d => d.Ip)
+                               : baseQuery.OrderBy(d => d.Code).ThenBy(d => d.SerialNo).ThenBy(d => d.Ip),
+                "ip" => desc ? baseQuery.OrderByDescending(d => d.Ip) : baseQuery.OrderBy(d => d.Ip),
+                "branch" => desc ? baseQuery.OrderByDescending(d => d.Branch!.Name) : baseQuery.OrderBy(d => d.Branch!.Name),
+                "seen" => desc ? baseQuery.OrderByDescending(d => d.LastHeartbeat)
+                               : baseQuery.OrderBy(d => d.LastHeartbeat),
+                "serial" => desc ? baseQuery.OrderByDescending(d => d.SerialNo) : baseQuery.OrderBy(d => d.SerialNo),
+                _ => baseQuery.OrderBy(d => d.Code)
             };
 
+            // 4) اول total رو بگیر
+            var total = await totalQuery.CountAsync(cancellationToken);
 
-            var entities = await query.OrderByDescending(x => x.Mode == DeviceMode.Error)
+            // 5) بعد صفحه رو بگیر
+            var entities = await baseQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync(cancellationToken);
-
-
-            var total = await query.CountAsync(cancellationToken);
 
             // ----- مپ به ViewModel + محاسبات -----
             var list = entities.Select(MapToViewModel).ToList();
@@ -257,7 +304,7 @@ namespace NaraEyes.Application.Services.Devices
         public async Task<int> CheckHeartBeat( CancellationToken cancellationToken = default)
         {
 
-            var deadlineUtc = DateTime.Now.AddHours(-1);
+            var deadlineUtc = DateTime.Now.AddMinutes(-10);
 
             var staleDevices = await _uow.Devices
                 .Where(d => d.IsActive == true &&
@@ -289,12 +336,13 @@ namespace NaraEyes.Application.Services.Devices
                 {
                     Id = d.Id,
                     DisplayName = display,
+                    DeviceAgent=d.AgentStatus,
                     Ip = d.Ip,
                     SerialNo = d.SerialNo,
                     Model = d.Model ?? string.Empty,
                     Branch = d.Branch?.Name,                    // اگر navigation لود شد
                     Status = d.Mode,                            // DeviceMode → همان Status در VM
-                    LastSeen = d.LastHeartbeat ?? DateTime.MinValue,
+                    LastSeen = d.LastHeartbeat ?? DateTime.Now,
                     UpdatedAt = GuessUpdatedAt(d),                 // توضیح زیر
                     LastCommand = "AllDeviceStatus",
                     CashInventory = SafeSumCash(d),
@@ -340,6 +388,7 @@ namespace NaraEyes.Application.Services.Devices
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) // (اختیاری)
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
+            _dispatchState.MarkCommandEnqueued(deviceIp);
             var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(60), ct);
             return bytes;
         }
@@ -355,7 +404,7 @@ namespace NaraEyes.Application.Services.Devices
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
 
-
+            _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
             var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
             return ack.Accepted;
@@ -375,8 +424,8 @@ namespace NaraEyes.Application.Services.Devices
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
 
-
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+                _dispatchState.MarkCommandEnqueued(deviceIp);
+                var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
             if (ack.Accepted)
             {
                 var metrics = await _uow.Devices.AsNoTracking()
@@ -429,6 +478,8 @@ usage=x.CurrentMetrics.CpuUsage??0,
                 warningCount = devices.Where(x => x.Mode == DeviceMode.warning).Count(),
                 offlineCount = devices.Where(x => x.Mode == DeviceMode.Offline).Count(),
                 OnlineCount= devices.Where(x => x.Mode == DeviceMode.Online).Count(),
+                OutOfService= devices.Where(x => x.Mode == DeviceMode.Supervisor).Count() + devices.Where(x => x.Mode == DeviceMode.Error).Count()+
+                devices.Where(x => x.Mode == DeviceMode.Offline).Count(),
                 TotalDevice =devices.Count(),
                 BranchCount= branchcount,
                 Supervisions= supervision,
@@ -451,7 +502,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
 
-
+            _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
             var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
             return ack.Accepted;
@@ -468,8 +519,25 @@ usage=x.CurrentMetrics.CpuUsage??0,
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
 
-
+            _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
+            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+            return ack.Accepted;
+        }
+        public async Task<bool> GetForcesStatus(string deviceIp, CancellationToken ct = default)
+        {
+            var id = Guid.NewGuid(); 
+            var cmd = new OutBoxDeviceMessage
+            {
+                Id = id,                         
+                DeviceIp = deviceIp,
+                CommandType = CommandType.GetForcesStatus,
+                Payload = JsonSerializer.Serialize(new { CommandId = id }) 
+            };
+            await _outbox.EnqueueCommandAsync(cmd, ct);
+            _dispatchState.MarkCommandEnqueued(deviceIp);
+
+
             var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
             return ack.Accepted;
         }
@@ -492,7 +560,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             };
 
             await _outbox.EnqueueCommandAsync(cmd, ct);
-
+            _dispatchState.MarkCommandEnqueued(deviceIp);
 
             var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(60), ct);
             return (bytes is { Length: > 0 }) ? bytes : null;
@@ -518,7 +586,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             };
 
             await _outbox.EnqueueCommandAsync(cmd, cancellationToken);
-
+            _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
             var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), cancellationToken);
             return ack.Accepted;
@@ -576,8 +644,8 @@ usage=x.CurrentMetrics.CpuUsage??0,
             };
 
             await _outbox.EnqueueCommandAsync(cmd, ct);
+            _dispatchState.MarkCommandEnqueued(deviceIp);
 
-          
             var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
             return ack.Accepted;
         }
@@ -726,6 +794,192 @@ usage=x.CurrentMetrics.CpuUsage??0,
                 default: return XLColor.White;
             }
         }
+
+        public async Task<bool> AddDeviceWithExcel(IBrowserFile file, CancellationToken cancellationToken = default)
+        {
+            if (file is null)
+                return false;
+
+            await using var stream = file.OpenReadStream(5 * 1024 * 1024, cancellationToken);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms, cancellationToken);
+            ms.Position = 0;
+
+            using var wb = new XLWorkbook(ms);
+            var ws = wb.Worksheets.FirstOrDefault();
+            if (ws == null)
+                return false;
+
+            var range = ws.RangeUsed();
+            if (range == null)
+                return false;
+
+            // همه کدهای موجود
+
+            var branches = await _uow.Branches.AsNoTracking()
+                .Select(x =>new { x.Id, x.Code }).ToListAsync(cancellationToken);
+
+            var userId = await GetUserId();
+            if (userId == null || userId == Guid.Empty)
+                return false;
+
+            var newEntities = new List<Device>();
+            var codesInFile = new HashSet<int>();
+
+            foreach (var row in range.RowsUsed().Skip(1))
+            {
+
+      
+                var codeCell = row.Cell(1);
+                string codeText;
+
+                if (codeCell.DataType == XLDataType.Number)
+                {
+
+                    codeText = ((int)codeCell.GetDouble()).ToString();
+                }
+                else
+                {
+                    codeText = codeCell.GetString()?.Trim();
+                }
+
+
+
+
+                var Ip = row.Cell(2).GetString()?.Trim();
+                var BranchCode = row.Cell(3).GetString()?.Trim();
+                if(BranchCode==null)
+                    return false;
+                var branchId=branches.Where(x=>x.Code==int.Parse(BranchCode)).Select(x=>x.Id).FirstOrDefault();
+                var Model = row.Cell(4).GetString()?.Trim();
+                var Serial = row.Cell(5).GetString()?.Trim();
+
+                var Address = row.Cell(6).GetString()?.Trim();
+                var Latitude = row.Cell(7).GetString()?.Trim();
+                var Longtitude = row.Cell(8).GetString()?.Trim();
+                var Description = row.Cell(9).GetString()?.Trim();
+
+                if (string.IsNullOrWhiteSpace(codeText))
+                    continue;
+
+                if (!int.TryParse(codeText, out var code))
+                    continue;
+
+
+                if (!codesInFile.Add(code))
+                    continue;
+
+            var lon=string.IsNullOrEmpty(Longtitude)?0:decimal.Parse(Longtitude);
+                var lat = string.IsNullOrEmpty(Latitude) ? 0 : decimal.Parse(Latitude);
+
+                Device? entity = Device.RegisterNewDev(int.Parse(codeText), Ip, Model, Serial, Address, lon,
+                    lat, Description, branchId, null);
+
+                var userid = await GetUserId();
+                entity.CreatedByUserId = userid;
+
+
+                newEntities.Add(entity);
+            }
+
+            if (newEntities.Count == 0)
+                return false;
+
+            _uow.Devices.AddRange(newEntities);
+            await _uow.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        public async Task<string?> GetSampleFileForDownload(CancellationToken cancellationToken = default)
+        {
+            using var wb = new XLWorkbook();
+
+
+            var ws = wb.Worksheets.Add("دستگاه ها");
+            ws.Cell(1, 1).Value = "کد";
+            ws.Cell(1, 2).Value = "آیپی";
+            ws.Cell(1, 3).Value = "کد شعبه";
+            ws.Cell(1, 4).Value = "مدل";
+            ws.Cell(1, 5).Value = "شماره سریال";
+            ws.Cell(1, 6).Value = "آدرس ";
+            ws.Cell(1, 7).Value = "عرض جغرافیایی";
+            ws.Cell(1, 8).Value = "طول جغرافیایی";
+            ws.Cell(1, 9).Value = "توضیحات";
+
+
+            var headerRange = ws.Range("A1:H1");
+            headerRange.Style.Font.Bold = true;
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            return await Task.FromResult(base64); 
+
+
+          
+        }
+
+        public async Task<string?> GetDeviceReport(CancellationToken cancellationToken = default)
+        {
+            var list = await _uow.Devices.Include(c=>c.Branch)
+          .AsNoTracking()
+          .Select(x => new
+          {
+              x.Code,
+              x.Ip,
+              x.Branch.Name,
+              x.Model,
+              x.SerialNo,
+              x.Address,
+              x.Latitude,
+              x.Longitude,
+              x.Description
+          })
+          .OrderBy(x => x.Code)
+          .ToListAsync(cancellationToken);
+
+            using var wb = new ClosedXML.Excel.XLWorkbook();
+            var ws = wb.Worksheets.Add("Supervisions");
+
+            ws.Cell(1, 1).Value = "کد دستگاه";
+            ws.Cell(1, 2).Value = "آیپی";
+            ws.Cell(1, 3).Value = " شعبه";
+            ws.Cell(1, 4).Value = "مدل";
+            ws.Cell(1, 5).Value = "شماره سریال ";
+            ws.Cell(1, 6).Value = "آدرس";
+            ws.Cell(1, 7).Value = "عرض چغرافیایی";
+            ws.Cell(1, 8).Value = "طول چغرافیایی";
+            ws.Cell(1, 9).Value = "توضیحات";
+
+            ws.Range("A1:I1").Style.Font.Bold = true;
+
+            var row = 2;
+            foreach (var item in list)
+            {
+                ws.Cell(row, 1).Value = item.Code;
+                ws.Cell(row, 2).Value = item.Ip;
+                ws.Cell(row, 3).Value = item.Name;
+                ws.Cell(row, 4).Value = item.Model;
+                ws.Cell(row, 5).Value = item.SerialNo;
+                ws.Cell(row, 6).Value = item.Address;
+                ws.Cell(row, 7).Value = item.Latitude;
+                ws.Cell(row, 8).Value = item.Longitude;
+                ws.Cell(row, 9).Value = item.Description;
+                row++;
+            }
+
+
+            ws.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            return base64;
+        }
+
+     
     }
 
 }

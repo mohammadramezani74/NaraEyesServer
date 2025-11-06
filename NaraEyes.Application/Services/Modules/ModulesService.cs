@@ -84,6 +84,7 @@ namespace NaraEyes.Application.Services.Modules
                         idc.ModuleId = IdcModule.Id;
                         idc.Status = CDMHelper.MapDeviceStatusToPersian((ushort)idcStatus.Status);
                     }
+                   }
                     if (ptrModule != null)
                     {
                         var ptrStatus = modulStatuses
@@ -137,7 +138,7 @@ namespace NaraEyes.Application.Services.Modules
                     }
 
 
-                }
+                
 
             }
             return list;

@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
 using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.Unitofwork;
+using NaraEyes.Application.Contracts.Interfaces.Base;
 using NaraEyes.Application.Contracts.Interfaces.Bulkoperations;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Bulkoperations;
@@ -15,6 +17,7 @@ using NaraEyes.Application.Contracts.Utilities;
 using NaraEyes.Domain.Entities.Base;
 using NaraEyes.Domain.Entities.BulkOperation;
 using NaraEyes.Domain.Entities.BulkOperation.Enums;
+using NaraEyes.Domain.Entities.Devices;
 using NaraEyes.Domain.Enumerations;
 using System;
 using System.Collections.Generic;
@@ -27,39 +30,51 @@ namespace NaraEyes.Application.Services.Bulkoperations
 {
     public sealed class BulkoperationsService(IApplicationUnitOfWork uow,
         IApplicationUserManager userManamager
-        , Microsoft.AspNetCore.Hosting.IHostingEnvironment _environment
-         ) : IBulkoperationsService
+        , Microsoft.AspNetCore.Hosting.IHostingEnvironment _environment,
+        AuthenticationStateProvider auth
+,
+        ICommandDispatchState dispatchState) : IBulkoperationsService
     {
         private readonly IApplicationUnitOfWork _uow = uow;
         private readonly IApplicationUserManager _userManamager = userManamager;
+        private readonly ICommandDispatchState _dispatchState= dispatchState;
         private readonly Microsoft.AspNetCore.Hosting.IHostingEnvironment environment = _environment;
 
-        public async Task<OperationResult> BulkFileUpload(IBrowserFile file, List<GroupedDeviceViewModel> SelectedDevice,string baseuri, CancellationToken cancellationToken = default)
-        { var op = new OperationResult();
+        public async Task<OperationResult> BulkFileUpload(IBrowserFile file, List<GroupedDeviceViewModel> SelectedDevice, string baseuri, CancellationToken cancellationToken = default)
+        {
+            var op = new OperationResult();
             var CreatedUrl = "";
             try
             {
+                var userId = _userManamager.UserId;
+                var state = await auth.GetAuthenticationStateAsync();
+                var user = state.User;
+                var idValue = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-        
-            var type = OperationType.FileSend;
-            var userId = _userManamager.UserId;
+                if (Guid.TryParse(idValue, out var gid))
+                    userId = gid;
+                else
+                    userId = null;
+                var type = OperationType.FileSend;
 
-             CreatedUrl =await Uploader.Upload(file, environment);
 
-                var newOutBoxMwssage = OutBoxDeviceMessage.CreateForCampaign("255.255.255.0", userId, CommandType.UploadGroupFile,file.Name);
-            _uow.OutBoxDeviceMessages.Add(newOutBoxMwssage);
+                CreatedUrl = await Uploader.Upload(file, environment);
 
-            var campain = Campaign.createCampaign(type, newOutBoxMwssage.Id, EnumHelper.GetEnumDisplayName(type),userId);
-            foreach (var device in SelectedDevice)
-            {
-                var newTarget = CampaignTarget.CreateNewTarget(campain.Id, device.Ip, userId);
+                var newOutBoxMwssage = OutBoxDeviceMessage.CreateForCampaign("255.255.255.0", userId, CommandType.UploadGroupFile, file.Name);
+                _uow.OutBoxDeviceMessages.Add(newOutBoxMwssage);
 
-                campain.NewTarget(newTarget);
-            }
+                var campain = Campaign.createCampaign(type, newOutBoxMwssage.Id, EnumHelper.GetEnumDisplayName(type), userId);
+                foreach (var device in SelectedDevice)
+                {
+                    var newTarget = CampaignTarget.CreateNewTarget(campain.Id, device.Ip, userId);
+
+                    campain.NewTarget(newTarget);
+                }
                 var payload = new SendGroupInstructionModel
-                {MessageBoxId=newOutBoxMwssage.Id,
-                CampaignId=campain.Id,
-               
+                {
+                    MessageBoxId = newOutBoxMwssage.Id,
+                    CampaignId = campain.Id,
+
                     Type = (int)type,
                     url = $"{baseuri}{CreatedUrl}"
                 };
@@ -72,8 +87,13 @@ namespace NaraEyes.Application.Services.Bulkoperations
                     targetUser.SetLastCommand(CommandType.UploadGroupFile);
                 }
                 await _uow.SaveChangesAsync(cancellationToken);
+                foreach (var device in campain.Targets)
+                {
+                    var key = ToolsDate.Key(device.DeviceIp);
+                    _dispatchState.MarkCommandEnqueued(key);
+                }
                 return op.succedded();
-                        }
+            }
             catch (Exception ex)
             {
                 Uploader.DeleteFile(CreatedUrl, environment);
@@ -95,30 +115,30 @@ namespace NaraEyes.Application.Services.Bulkoperations
                     {
                         return await CreateMetricExcel(Ips, cancellationToken);
                     }
-           
+
                 case OperationType.AgentVersion:
                     return await CreateAgentExcel(Ips, cancellationToken);
-               
+
 
                 case OperationType.CameraVersion:
                     return await CreateCameraExcel(Ips, cancellationToken);
                 default:
                     return string.Empty;
             }
-         
+
             return string.Empty;
         }
 
 
 
-        public async Task<List< GroupedDeviceViewModel>> GetDevices(GroupedDeviceFilterViewModel filter, CancellationToken cancellationToken = default)
+        public async Task<List<GroupedDeviceViewModel>> GetDevices(GroupedDeviceFilterViewModel filter, CancellationToken cancellationToken = default)
         {
             var DevicesQuery = _uow.Devices.AsNoTracking()
                 .Include(x => x.Branch.Supervision)
                 .Where(x => !x.Deleted);
             if (filter.BranchId.HasValue)
             {
-                DevicesQuery= DevicesQuery.Where(x=>x.BranchId == filter.BranchId.Value);
+                DevicesQuery = DevicesQuery.Where(x => x.BranchId == filter.BranchId.Value);
             }
             if (filter.SupervisionId.HasValue)
             {
@@ -185,6 +205,11 @@ namespace NaraEyes.Application.Services.Bulkoperations
                     targetUser.SetLastCommand(CommandType.ResetGroup);
                 }
                 await _uow.SaveChangesAsync(cancellationToken);
+                foreach (var device in campain.Targets)
+                {
+                    var key = ToolsDate.Key(device.DeviceIp);
+                    _dispatchState.MarkCommandEnqueued(key);
+                }
                 return op.succedded();
             }
             catch (Exception)
@@ -365,8 +390,8 @@ namespace NaraEyes.Application.Services.Bulkoperations
                    {
                        DeviceIp = x.Ip,
                        Name = x.Model,
-                      agentVersion=x.AgentVersion,
-                      modifyDate=x.ModifiedDate.HasValue?x.ModifiedDate.Value.ToFarsiFull():x.ModifiedDate.ToFarsi(),
+                       agentVersion = x.AgentVersion,
+                       modifyDate = x.ModifiedDate.HasValue ? x.ModifiedDate.Value.ToFarsiFull() : x.ModifiedDate.ToFarsi(),
                    }).ToListAsync(cancellationToken);
 
 
@@ -391,8 +416,8 @@ namespace NaraEyes.Application.Services.Bulkoperations
             r++;
             foreach (var m in metrics)
             {
-                
-              
+
+
 
 
                 ws.Cell(r, 1).Value = m.DeviceIp;

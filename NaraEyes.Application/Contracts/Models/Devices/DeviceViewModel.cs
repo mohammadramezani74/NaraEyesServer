@@ -11,6 +11,7 @@ namespace NaraEyes.Application.Contracts.Models.Devices
     {
         public Guid Id { get; set; }
         public string DisplayName { get; set; } = string.Empty;
+        public bool DeviceAgent { get; set; }
         public string Ip { get; set; } = string.Empty;
         public string? SerialNo { get; set; }
         public string Model { get; set; } = string.Empty;

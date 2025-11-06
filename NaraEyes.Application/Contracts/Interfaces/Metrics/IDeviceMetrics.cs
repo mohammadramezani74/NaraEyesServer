@@ -19,6 +19,7 @@ namespace NaraEyes.Application.Contracts.Interfaces.Metrics
         /// <returns></returns>
         Task<OperationResult> SubmitOrUpdateMetrics(DeviceMetricsDto command, CancellationToken cancellationToken = default);
         Task<OperationResult> SubmitOrUpdateModulesStatus(DeviceMuduleStatusCommand command, CancellationToken cancellationToken = default);
+        Task<OperationResult> UpdateAgentStatus(string Ip, CancellationToken cancellationToken = default);
     }
 
 }

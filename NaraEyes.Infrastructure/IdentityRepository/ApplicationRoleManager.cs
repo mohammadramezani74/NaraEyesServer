@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using DocumentFormat.OpenXml.Office2010.ExcelAc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Contracts.Models.Basic;
@@ -234,6 +235,36 @@ namespace NaraEyes.Infrastructure.IdentityRepository
                 ClaimList.Add(claim.Value);
             }
             return ClaimList;
+        }
+
+        public async Task<string?> GetRoleReport(CancellationToken cancellationToken = default)
+        {
+            var roles = await GetRoles(null);
+            using var wb = new ClosedXML.Excel.XLWorkbook();
+            var ws = wb.Worksheets.Add("Supervisions");
+
+            ws.Cell(1, 1).Value = "نقش ها";
+
+
+
+            ws.Range("A1:G1").Style.Font.Bold = true;
+
+            var row = 2;
+            foreach (var item in roles)
+            {
+                ws.Cell(row, 1).Value = item.Name;
+
+                row++;
+            }
+
+
+            ws.Columns().AdjustToContents();
+
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            return base64;
         }
 
         /// <summary>

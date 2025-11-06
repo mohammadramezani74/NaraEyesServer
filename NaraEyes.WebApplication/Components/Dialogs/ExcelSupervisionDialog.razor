@@ -1,0 +1,127 @@
+﻿@using NaraEyes.Application.Contracts.Interfaces.Base
+@inject ISupervisionStateService service
+<MudDialog>
+    <DialogContent>
+
+        <MudText Typo="Typo.h6" Class="mb-2">عملیات اکسل</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            یکی از گزینه‌های زیر را انتخاب کنید.
+        </MudText>
+
+        <MudStack Spacing="2">
+
+            <!-- 1) گزارش گیری -->
+            <MudPaper Class="pa-3 d-flex justify-space-between align-center" Elevation="0" Style="border:1px solid #eee; border-radius:12px;">
+                <div>
+                    <MudText Typo="Typo.subtitle2">گزارش از سرپرستی‌ها</MudText>
+                    <MudText Typo="Typo.caption">اکسل از داده‌های فعلی سیستم تولید می‌شود.</MudText>
+                </div>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           OnClick="ExportCurrentData">
+                    دانلود
+                </MudButton>
+            </MudPaper>
+
+            <!-- 2) فایل نمونه برای ایمپورت -->
+            <MudPaper Class="pa-3 d-flex justify-space-between align-center" Elevation="0" Style="border:1px solid #eee; border-radius:12px;">
+                <div>
+                    <MudText Typo="Typo.subtitle2">تولید فایل نمونه جهت ایمپورت</MudText>
+                    <MudText Typo="Typo.caption">فایل شامل ستون‌های درست و لیست سرپرستی‌ها (Data Validation) است.</MudText>
+                </div>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Success"
+                           OnClick="DownloadTemplate">
+                    فایل نمونه
+                </MudButton>
+            </MudPaper>
+
+            <!-- 3) ایمپورت از اکسل -->
+            <MudPaper Class="pa-3" Elevation="0" Style="border:1px solid #eee; border-radius:12px;">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.subtitle2">ایمپورت از اکسل</MudText>
+                        <MudText Typo="Typo.caption">فایل ساخته‌شده از روی همین تمپلیت را انتخاب کنید.</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Info"
+                               OnClick="@(()=>showUpload = !showUpload)">
+                        انتخاب فایل
+                    </MudButton>
+                </MudStack>
+
+                @if (showUpload)
+                {
+                    <div class="mt-3">
+                        <InputFile OnChange="OnExcelSelected" />
+                        @if (!string.IsNullOrEmpty(uploadFileName))
+                        {
+                            <MudText Typo="Typo.caption" Class="mt-1">فایل: @uploadFileName</MudText>
+                        }
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="ImportExcel"
+                                   Disabled="@(selectedFile is null)"
+                                   Class="mt-2">
+                            ایمپورت
+                        </MudButton>
+                    </div>
+                }
+            </MudPaper>
+
+        </MudStack>
+
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">بستن</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] public IMudDialogInstance MudDialog { get; set; }
+
+    // آپلود
+    private bool showUpload = false;
+    private IBrowserFile? selectedFile;
+    private string? uploadFileName;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    // 1) گزارش گیری
+    private async Task ExportCurrentData()
+    {
+        MudDialog.Close(DialogResult.Ok(1));
+    }
+
+    // 2) دانلود تمپلیت
+    private async Task DownloadTemplate()
+    {
+        MudDialog.Close(DialogResult.Ok(2));
+    }
+
+    // 3) انتخاب فایل
+    private void OnExcelSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+        uploadFileName = e.File?.Name;
+    }
+
+    // 3) ارسال برای سرور
+    private async Task ImportExcel()
+    {
+        if (selectedFile is null)
+            return;
+         var result=   await service.AddSupervisionWithExcel(selectedFile);
+         if(result)
+            MudDialog.Close(DialogResult.Ok(3));
+            else
+            MudDialog.Close(DialogResult.Ok(4));
+
+
+    }
+ 
+}

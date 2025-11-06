@@ -20,6 +20,25 @@ namespace NaraEyes.WebApplication
             services.AddSingleton<ILoginRateLimiter, LoginRateLimiter>();
             services.Configure<ApplicationSettings>(configuration);
             services.AddSweetAlert2();
+            services.ConfigureApplicationCookie(options =>
+            {
+                // اگه کاربر لاگین نبود، بفرستش اینجا
+                options.LoginPath = "/Account/Login";
+
+                // اگه دسترسی نداشت
+                options.AccessDeniedPath = "/Account/AccessDenied";
+
+                // اسم کوکی
+                options.Cookie.Name = "NaraEyes.Auth";
+
+                // دامنه/سک Cure و ...
+                options.Cookie.SameSite = SameSiteMode.Lax; // اگه https نداری بهتره Lax باشه
+                options.Cookie.HttpOnly = true;             // از JS نخونن
+
+                // مدت اعتبار
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.SlidingExpiration = true;
+            });
 
             services.AddIdentity<User, Role>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
