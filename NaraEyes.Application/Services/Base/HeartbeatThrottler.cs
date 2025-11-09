@@ -19,7 +19,7 @@ namespace NaraEyes.Application.Services.Base
         public HeartbeatThrottler(IServiceScopeFactory scopeFactory, TimeSpan? minInterval = null)
         {
             _scopeFactory = scopeFactory;
-            _minInterval = minInterval ?? TimeSpan.FromSeconds(20);
+            _minInterval = minInterval ?? TimeSpan.FromMinutes(2);
         }
 
         public async Task UpdateAsync(string deviceIp, CancellationToken ct)

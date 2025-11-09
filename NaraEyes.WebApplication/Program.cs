@@ -78,7 +78,12 @@ app.MapGet("/api/poll", async (
     var response = await pollingService.PollAsync(ip, null, ct);
     return Results.Ok(response);
 });
-
+app.UseWebSockets();
+app.Map("/api/ws", async context =>
+{
+    var handler = context.RequestServices.GetRequiredService<WebSocketPollHandler>();
+    await handler.HandleAsync(context);
+});
 
 
 app.MapPost("/api/poll", async (

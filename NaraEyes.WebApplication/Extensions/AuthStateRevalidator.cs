@@ -13,7 +13,7 @@ namespace NaraEyes.WebApplication.Extensions
       )
       : RevalidatingServerAuthenticationStateProvider(loggerFactory)
     {
-        protected override TimeSpan RevalidationInterval => TimeSpan.FromSeconds(10);
+        protected override TimeSpan RevalidationInterval => TimeSpan.FromMinutes(15);
 
         protected async override Task<bool> ValidateAuthenticationStateAsync(AuthenticationState authenticationState,
             CancellationToken cancellationToken)

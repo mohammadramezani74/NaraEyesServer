@@ -26,6 +26,8 @@ namespace NaraEyes.Infrastructure
             services.AddScoped<IInboxService, InBoxDeviceService>();
             services.AddSingleton<ICommandAwaiter, CommandAwaiter>();
             services.AddSingleton<IAckAwaiter, AckAwaiter>();
+            services.AddScoped<WebSocketPollHandler>();
+
 
             return services;
         }
