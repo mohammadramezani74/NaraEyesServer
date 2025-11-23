@@ -30,10 +30,11 @@
             <!-- 👇 رنگ متن را صراحتاً روی رنگ متن استاندارد تم می‌گذاریم -->
             <div class="pa-4" style="height:100%; color: var(--mud-palette-text-primary);">
                 <div class="mini-wrap">
+            
                     <MudPaper Class="mini" Elevation="1">
                         <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Medium" Color="Color.Inherit" />
                         <MudText Typo="Typo.caption">نام دستگاه</MudText>
-                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.DisplayName</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.DeviceModel</MudText>
                     </MudPaper>
 
                     <MudPaper Class="mini" Elevation="1">
@@ -45,7 +46,7 @@
                     <MudPaper Class="mini" Elevation="1">
                         <MudIcon Icon="@Icons.Material.Filled.Numbers" Size="Size.Medium" Color="Color.Inherit" />
                         <MudText Typo="Typo.caption">تاریخ نصب دستگاه</MudText>
-                        <MudText Typo="Typo.body1" Class="fw-bold">1400/12/03</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.InstallationDate</MudText>
                     </MudPaper>
 
                     <MudPaper Class="mini" Elevation="1">
@@ -63,25 +64,25 @@
                     <MudPaper Class="mini" Elevation="1">
                         <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Medium" Color="Color.Inherit" />
                         <MudText Typo="Typo.caption">اپراتور</MudText>
-                        <MudText Typo="Typo.body1" Class="fw-bold">محمد سلیمی (09123456576)</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.OperatorName (@_device.OperatorMobile)</MudText>
                     </MudPaper>
 
                     <MudPaper Class="mini" Elevation="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Medium" Color="Color.Inherit" />
-                        <MudText Typo="Typo.caption">آخرین مشاهده</MudText>
-                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.LastHeartBeat</MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.Dns" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">کد دستگاه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.code</MudText>
                     </MudPaper>
 
                     <MudPaper Class="mini" Elevation="1">
                         <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Medium" Color="Color.Inherit" />
                         <MudText Typo="Typo.caption">سریال دستگاه</MudText>
-                        <MudText Typo="Typo.body1" Class="fw-bold">@($"Y560040012004")</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.DeviceSerial</MudText>
                     </MudPaper>
 
                     <MudPaper Class="mini" Elevation="1">
-                        <MudIcon Icon="@Icons.Material.Filled.DeveloperBoard" Size="Size.Medium" Color="Color.Inherit" />
-                        <MudText Typo="Typo.caption">مدل دستگاه</MudText>
-                        <MudText Typo="Typo.body1" Class="fw-bold">هیوسانگ</MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.LocationCity" Size="Size.Medium" Color="Color.Inherit" />
+                        <MudText Typo="Typo.caption">آدرس دستگاه</MudText>
+                        <MudText Typo="Typo.body1" Class="fw-bold">@_device.Address</MudText>
                     </MudPaper>
                 </div>
             </div>
@@ -135,10 +136,19 @@
                     <div class="px-3 py-2 rounded-lg mud-elevation-1">
                         <div class="d-flex align-center justify-space-between">
                             <div class="d-flex align-center" style="gap:.5rem">
-                                <MudIcon Icon="@Icons.Material.Filled.NetworkPing" Size="Size.Small" />
-                                <MudText Typo="Typo.body2">Latency</MudText>
+                                <MudIcon Icon="@Icons.Material.Filled.Window" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">ویندوز</MudText>
                             </div>
-                            <MudText Typo="Typo.body2" Class="fw-semibold">@($"{23} ms")</MudText>
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@_device.WinModel</MudText>
+                        </div>
+                    </div>
+                    <div class="px-3 py-2 rounded-lg mud-elevation-1">
+                        <div class="d-flex align-center justify-space-between">
+                            <div class="d-flex align-center" style="gap:.5rem">
+                                <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">تایم</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="fw-semibold">@_device.Drift</MudText>
                         </div>
                     </div>
 
@@ -173,13 +183,13 @@
 
                     <MudPaper Class="gauge-card">
                         <div class="gauge-ring">
-                            <MudProgressCircular Color="Color.Info" Size="Size.Large" Value="@_ramUsed" Max="100" Thickness="4" />
+                            <MudProgressCircular Color="Color.Success" Size="Size.Large" Value="@_ramUsed" Max="100" Thickness="4" />
                             <span class="gauge-value">@($"{_ramUsed}%")</span>
                         </div>
                         <div>
                             <MudText Typo="Typo.subtitle2" Class="fw-bold k-label">RAM</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Used / Free</MudText>
-                            <MudProgressLinear Color="Color.Info" Value="@_ramUsed" Max="100" Class="mt-1" Rounded="true" />
+                            <MudProgressLinear Color="Color.Success" Value="@_ramUsed" Max="100" Class="mt-1" Rounded="true" />
                         </div>
                     </MudPaper>
 
@@ -218,7 +228,9 @@
 @code {
     [Parameter]
     public string? DeviceIp { get; set; }
-    public DeviceMetricsViewModel _device { get; set; } = new();
+    [Parameter]
+    public DeviceMetricsViewModel _device { get; set; }
+
     private readonly string[] _metricLabels = new[] { "CPU", "RAM", "Disk" };
     private List<ChartSeries> _stackedSeries = new();
     private double _cpuUsed, _ramUsed, _diskUsed;
@@ -228,25 +240,35 @@
         StackedBarWidthRatio = 0.6,
         XAxisLabelRotation = 0
     };
+
     protected async override Task OnInitializedAsync()
     {
-        _device = await _service.GetMetricsAsync(DeviceIp);
-        _cpuUsed = _device.CpuUsage.usage;
-        _ramUsed = _device.RamUsage.usage;
-        _diskUsed = _device.DiskUsage.usage;
-        var used = new double[] { _device.CpuUsage.usage, _device.RamUsage.usage, _device.DiskUsage.usage };
-        var free = new double[] { _device.CpuUsage.free, _device.RamUsage.free, _device.DiskUsage.free };
+   
+    }
+    protected override void OnParametersSet()
+    {
+        if (_device.CpuUsage?.usage != null)
+        {
 
-        _stackedSeries = new ()
+
+            _cpuUsed = _device.CpuUsage.usage;
+            _ramUsed = _device.RamUsage.usage;
+            _diskUsed = _device.DiskUsage.usage;
+            var used = new double[] { _device.CpuUsage.usage, _device.RamUsage.usage, _device.DiskUsage.usage };
+            var free = new double[] { _device.CpuUsage.free, _device.RamUsage.free, _device.DiskUsage.free };
+
+            _stackedSeries = new()
                 {
                     new ChartSeries { Name = "Used %", Data = used
         },
                     new ChartSeries { Name = "Free %", Data = free }
                 };
+                StateHasChanged();
+        }
     }
     private ChartOptions _chartOptions = new()
     {
-        ChartPalette = new[] { "#1976D2", "#9E9E9E" } // Used / Free
+        ChartPalette = new[] { "#34d399", "#9E9E9E" } // Used / Free
     };
     public async Task ReloadFakeData()
     {

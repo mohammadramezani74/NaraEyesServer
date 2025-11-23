@@ -1,0 +1,133 @@
+﻿@using CurrieTechnologies.Razor.SweetAlert2
+@using NaraEyes.Application.Contracts.Interfaces.Devices
+@using NaraEyes.Application.Contracts.Models.Devices
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IDeviceService DeviceService
+@inject IJSRuntime JS
+@inject SweetAlertService Swal;
+<MudPaper Class="p-3 rounded-2xl mt-2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Spacing="2" Class="mb-2">
+        <MudTextField T="string"
+                      @bind-Value="_search"
+                      Placeholder="جستجو دستگاه (کُد/IP/سریال/مدل)..."
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="w-96"
+                      Immediate="true"
+                      DebounceInterval="300"/>
+        <MudStack Row="true" Spacing="1">
+            <MudIconButton OnClick="GetReportExcel" Color="Color.Success"
+                           Variant="Variant.Filled"
+                           Size="Size.Medium"
+                           Class="ml-2" Icon="@Icons.Custom.FileFormats.FileExcel">خروجی اکسل</MudIconButton>
+
+
+        </MudStack>
+    </MudStack>
+
+    <MudTable Items="_devices"
+              Dense="true" Hover="true" Bordered="true"
+              Filter="DeviceFilter" Loading="_loading">
+        <ColGroup>
+            <col style="width: 110px;" />
+            <col style="width: 160px;" />
+            <col style="width: 220px;" />
+            <col />
+            <col style="width: 110px;" />
+        </ColGroup>
+
+        <HeaderContent>
+            <MudTh>کُد</MudTh>
+            <MudTh>IP</MudTh>
+            <MudTh>سریال</MudTh>
+            <MudTh>مدل</MudTh>
+            <MudTh>آدرس</MudTh>
+            <MudTh>علت حذف</MudTh>
+            <MudTh>حذف شده توسط</MudTh>
+            <MudTh>تاریخ حذف</MudTh>
+
+            <MudTh class="text-end">عملیات</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="کُد">@context.Code</MudTd>
+            <MudTd DataLabel="IP">@context.Ip</MudTd>
+            <MudTd DataLabel="سریال">@context.SerialNo</MudTd>
+            <MudTd DataLabel="مدل">@context.Model</MudTd>
+            <MudTd DataLabel="آدرس">@context.Address</MudTd>
+            <MudTd DataLabel="علت حذف">@context.DeleteReson</MudTd>
+            <MudTd DataLabel="حذف شده توسط">@context.DeletedBy</MudTd>
+            <MudTd DataLabel="تاریخ حذف">@context.DeletedAt</MudTd>
+            <MudTd Class="text-end">
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Restore" Color="Color.Success" title="بازیابی دستگاه" OnClick="@(() => RestoreDevice(context))" />
+
+                </MudStack>
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Class="my-3" />
+            }
+            else
+            {
+                <MudText Class="text-secondary">رکوردی یافت نشد.</MudText>
+            }
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    private string _search = "";
+    private bool _loading = true;
+    private List<ArcivedDeviceViewModel> _devices = new();
+
+    protected override async Task OnInitializedAsync() => await Load();
+    private bool DeviceFilter(ArcivedDeviceViewModel d)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+        var s = _search.Trim();
+        return (d.Code?.ToString().Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (d.Ip?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (d.SerialNo?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+             || (d.DeletedBy?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (d.Model?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+    private async Task Load()
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+            _devices = (await DeviceService.GatArchivedDevices(CancellationToken.None)).ToList();
+        }
+        catch
+        {
+            Snackbar.Add("خطا در دریافت لیست دستگاه‌ها.", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+    private async Task RestoreDevice(ArcivedDeviceViewModel context) { 
+        
+            await DeviceService.RestoreAsync(context.Id, CancellationToken.None);
+            await Swal.FireAsync("موفقیت", "بازیابی دستگاه با موفقیت انجام شد", SweetAlertIcon.Success);
+            await Load();
+        }
+    public async Task GetReportExcel()
+    {
+        
+    }
+ 
+    }
+}

@@ -3,6 +3,7 @@
 @using MudBlazor
 @using NaraEyes.Application.Contracts.Interfaces.Devices
 @using NaraEyes.Application.Contracts.Interfaces.Modules
+@using NaraEyes.Application.Contracts.Models.Metrics
 @using NaraEyes.Application.Contracts.Models.Modules
 @using NaraEyes.Application.Contracts.Models.Modules.CDM
 @using NaraEyes.Application.Contracts.Utilities
@@ -94,7 +95,7 @@
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mx-auto pa-4">
 
-<MetricsComponents DeviceIp="@ip"></MetricsComponents>
+    <MetricsComponents DeviceIp="@ip" _device="_deviceMetrics"></MetricsComponents>
 
     <!-- XFS Status -->
     <MudCard Class="rounded-2xl mb-4">
@@ -116,9 +117,9 @@
                             </div>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@m.Description</MudText>
                             <div class="mt-auto d-flex" style="gap:.5rem">
-                                @if (m.Name == ModuleCreationHelper.Dispenser ||
+                                @if ((m.Name == ModuleCreationHelper.Dispenser ||
                                                               m.Name == ModuleCreationHelper.IDC ||
-                                                              m.Name == ModuleCreationHelper.Ptr
+                                                              m.Name == ModuleCreationHelper.Ptr)&& !IsInService
                                   )
                                 {
                                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.RestartAlt" Disabled="@IsResetting(m)"
@@ -199,6 +200,7 @@
     private string Cam = "دوربین";
     private string Sensors = "سنسورها";
     private readonly HashSet<Guid> _resetting = new();
+    private bool IsInService = false;
 
     // هلپر
     private bool IsResetting(XfsModule m) => _resetting.Contains(m.ModuleId);
@@ -220,6 +222,8 @@
     private DeviceHeader _device = new();
     private List<XfsModule> _xfsModules = new();
     private List<Cassette> _cassettes = new();
+
+    public DeviceMetricsViewModel _deviceMetrics { get; set; } = new();
     private CancellationTokenSource _loadCts;
 
     // ===== Chart state (Used/Free) =====
@@ -233,7 +237,9 @@
         Ptr = ModuleCreationHelper.Ptr;
         Cam = ModuleCreationHelper.Cam;
         Sensors = ModuleCreationHelper.Sensors;
-        await Task.Delay(500);
+        _deviceMetrics = await service.GetMetricsAsync(ip);
+        IsInService = await _moduleServices.IsDeviceInservice(ip,_loadCts.Token);
+
 
         _xfsModules =await  _moduleServices.GetModulesStatus(ip,_loadCts.Token).ConfigureAwait(true);
         await Task.Delay(500);

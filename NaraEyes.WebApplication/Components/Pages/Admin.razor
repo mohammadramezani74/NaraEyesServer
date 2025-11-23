@@ -155,6 +155,16 @@
             <MudSkeleton Height="240px" Animation="Animation.Pulse" />
         }
     </MudTabPanel>
+        <MudTabPanel Icon="@Icons.Material.Filled.Archive" Text="آرشیو دستگاه ها">
+            @if (_loaded.Archive)
+            {
+                <ArchiveedTab />
+            }
+            else
+            {
+                <MudSkeleton Height="240px" Animation="Animation.Pulse" />
+            }
+        </MudTabPanel>
 
 
 
@@ -164,7 +174,7 @@
 @code {
     private string userName = "کاربر";
 
-    private (bool Branches, bool Users, bool Roles, bool Devices) _loaded;
+    private (bool Branches, bool Users, bool Roles, bool Devices,bool Archive) _loaded;
     private int _tabIndex;
     private int _activeIndex
     {
@@ -181,6 +191,7 @@
                 case 2: _loaded.Users = true; break;
                 case 3: _loaded.Roles = true; break;
                 case 4: _loaded.Devices = true; break;
+                case 5: _loaded.Archive = true; break;
             }
 
             StateHasChanged();

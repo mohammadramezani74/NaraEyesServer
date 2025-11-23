@@ -54,6 +54,8 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     dbContext.Database.Migrate();
+    await AppDataSeeder.SeedAsync(scope.ServiceProvider);
+
 }
 app.UseStaticFiles();
 app.UseCors("CorsPolicy");
@@ -144,14 +146,7 @@ app.MapPost("/api/device/AgentMode", async (
     return Results.Ok(res);
 });
 
-app.MapPost("/api/device/reregister", async (
-    DeviceReRegisterRequest req,
-    IDeviceService service,
-    CancellationToken ct) =>
-{
-    var id = await service.ReRegisterAsync(req.Ip, req.Model, req.AgentVersion, ct);
-    return Results.Ok(new { DeviceId = id });
-});
+
 
 
 app.Run();

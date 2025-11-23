@@ -17,6 +17,7 @@
 @inject IJSRuntime JS
 @inject IUserService userService
 @inject NavigationManager Nav
+@implements IAsyncDisposable
 @attribute [Authorize(Roles = "مدیریت استان,مدیریت مانیتورینگ,مدیریت مرکزی")]
 
 <MudTable T="DeviceViewModel"
@@ -80,10 +81,10 @@
     <HeaderContent>
         <MudTh><MudTableSortLabel SortLabel="status"   T="DeviceViewModel">وضعیت دستگاه</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="status" T="DeviceViewModel">وضعیت ایجنت</MudTableSortLabel></MudTh>
+         <MudTh><MudTableSortLabel SortLabel="name"     T="DeviceViewModel">کد دستگاه</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="name"     T="DeviceViewModel">نام دستگاه</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="ip"       T="DeviceViewModel">آی‌پی</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="branch"   T="DeviceViewModel">شعبه</MudTableSortLabel></MudTh>
-        <MudTh><MudTableSortLabel SortLabel="seen"     T="DeviceViewModel">آخرین مشاهده</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="serial"   T="DeviceViewModel">سریال</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="cash"     T="DeviceViewModel">موجودی</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="updated"  T="DeviceViewModel">بروزرسانی</MudTableSortLabel></MudTh>
@@ -113,10 +114,10 @@
                     </div>
                 }
             </MudText></MudTd>
-        <MudTd DataLabel="نام دستگاه"><MudText Typo="Typo.body2" Class="font-semibold">@context.DisplayName</MudText></MudTd>
+        <MudTd DataLabel="کد دستگاه"><MudText Typo="Typo.body2" Class="font-semibold">@context.DisplayName</MudText></MudTd>
+        <MudTd DataLabel="نام دستگاه"><MudText Typo="Typo.body2" Class="font-semibold">@context.Model</MudText></MudTd>
         <MudTd DataLabel="آی‌پی">@context.Ip</MudTd>
         <MudTd DataLabel="شعبه">@context.Branch</MudTd>
-        <MudTd DataLabel="آخرین مشاهده">@context.LastSeen.ToString("yyyy/MM/dd HH:mm")</MudTd>
         <MudTd DataLabel="سریال">@(@context.SerialNo ?? "—")</MudTd>
         <MudTd DataLabel="موجودی">@context.CashInventory.ToString("N0")</MudTd>
         <MudTd DataLabel="بروزرسانی">@context.UpdatedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
@@ -196,13 +197,13 @@
 
 @code {
     private MudTable<DeviceViewModel> table;
-
+    private bool _disposed;
     // فیلترها
     private string _search = string.Empty;
     private DeviceMode? _status;
     private Guid? _branchId;
     private HubConnection? _hubConnection;
-    private CancellationTokenSource? _cancellationTokenSource;
+    private CancellationTokenSource? _cancellationTokenSource=new();
 
     // شعب از سرویس
     private IReadOnlyList<BranchesViewModel>? _branches;
@@ -217,19 +218,27 @@
     protected override async Task OnInitializedAsync()
     {
 
-        _branches = await BranchService.GetAllBranches(CancellationToken.None);
+        _branches = await BranchService.GetAllBranches(_cancellationTokenSource.Token);
         await Task.Delay(500);
         try
         {
-            DeviceService.CheckHeartBeat();
+            DeviceService.CheckHeartBeat(_cancellationTokenSource.Token);
 
 
             _hubConnection = new HubConnectionBuilder()
               .WithUrl(Nav.ToAbsoluteUri("/deviceHub"))
               .Build();
-
             _hubConnection.On<string, DeviceMode>("ReceiveDeviceStatusUpdate", (ip, mode) =>
-               InvokeAsync(async () => await table.ReloadServerData()));
+            {
+                if (_disposed) return;
+
+                _ = InvokeAsync(async () =>
+                {
+                    if (_disposed) return;
+
+                    await table.ReloadServerData();
+                });
+            });
 
             await _hubConnection.StartAsync();
 
@@ -312,7 +321,7 @@
     // ---- Actions (فعلاً Snackbar؛ بعداً به IDeviceControlService وصل می‌کنیم) ----
     private async Task UpdateStatuses(DeviceViewModel d)
     {
-     var result=   await DeviceService.GetForcesStatus(d.Ip);
+        var result = await DeviceService.GetForcesStatus(d.Ip, _cancellationTokenSource.Token);
         if (result)
             Snackbar.Add($"بروزرسانی دستگاه {d.Ip} با موفقیت انجام شد", Severity.Success);
         else
@@ -571,6 +580,26 @@
 
         await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
     }
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
 
+        try
+        {
+            _cancellationTokenSource?.Cancel();
+            _cancellationTokenSource?.Dispose();
+        }
+        catch { }
+
+        if (_hubConnection is not null)
+        {
+            try
+            {
+                await _hubConnection.StopAsync();
+                await _hubConnection.DisposeAsync();
+            }
+            catch { }
+        }
+    }
     
 }

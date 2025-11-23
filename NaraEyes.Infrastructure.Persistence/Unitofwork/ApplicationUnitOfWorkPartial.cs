@@ -34,5 +34,6 @@ namespace NaraEyes.Infrastructure.Persistence.Unitofwork
         public DbSet<InBoxDeviceMessage> InBoxDeviceMessages => _context.Set<InBoxDeviceMessage>();
         public DbSet<Campaign> Campaigns => _context.Set<Campaign>();
         public DbSet<CampaignTarget> CampaignTargets => _context.Set<CampaignTarget>();
+        public DbSet<ArchivedDevice> ArchivedDevice => _context.Set<ArchivedDevice>();
     }
 }

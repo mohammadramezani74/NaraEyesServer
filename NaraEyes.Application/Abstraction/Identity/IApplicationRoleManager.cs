@@ -20,6 +20,7 @@ namespace NaraEyes.Application.Abstraction.Identity
         Task<UserRolesResponse[]> GetRolesByUserId(Guid UserId, CancellationToken cancellationToken = default(CancellationToken));
         Task<OperationResult> AddUserToRole(Guid RoleId, Guid UserId, CancellationToken cancellationToken = default(CancellationToken));
         Task<List<string>> GetClaims(Guid RoleId, CancellationToken cancellationToken = default(CancellationToken));
+        Task<bool> IsUserInRole(Guid UserId, string Role);
 
     }
 }

@@ -16,15 +16,37 @@ namespace NaraEyes.Application.Contracts.Interfaces.Devices
         /// <summary>ثبت یک ایجنت جدید</summary>
         Task<Guid> RegisterAsync(RegisterDeviceCommand context, CancellationToken ct);
 
-        Task<Guid> ReRegisterAsync(string ip, string model, string? agentVersion, CancellationToken ct);
-
         /// <summary>آپدیت Heartbeat برای دستگاه (Alive Signal)</summary>
         Task UpdateHeartbeatAsync(string ip, CancellationToken ct);
 
         /// <summary>غیرفعال‌سازی منطقی دستگاه</summary>
-        Task DeactivateAsync(Guid deviceId, CancellationToken ct);
+        Task DeactivateAsync(Guid deviceId,string reason ,CancellationToken ct);
+        /// <summary>
+        /// بازنشانی دستگاه
+        /// </summary>
+        /// <param name="deviceId"></param>
+        /// <param name="ct"></param>
+        /// <returns></returns>
+        Task RestoreAsync(Guid deviceId, CancellationToken ct);
+        /// <summary>
+        /// لیست آرشیو ها
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        Task<IReadOnlyList<ArcivedDeviceViewModel>> GatArchivedDevices(CancellationToken cancellationToken = default);
+        /// <summary>
+        /// لیست دستگاه ها  ستاد
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
         Task<IReadOnlyList<GetDevicesViewModel>> GetDevicesAsync(CancellationToken cancellationToken);
         Task<OperationResult> UpdateDevice_LegacyAsync(UpdateDeviceViewModel model, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// لیست دستگاه ها
+        /// </summary>
+        /// <param name="filter"></param>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
         Task<PageResultDto<DeviceViewModel>> GetAllDevicesAsync(DeviceFilterViewModel filter, CancellationToken cancellationToken = default);
 
         Task<byte[]> RequestScreenshotAsync(string deviceIp, CancellationToken ct = default);

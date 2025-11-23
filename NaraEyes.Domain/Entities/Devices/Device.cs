@@ -12,6 +12,7 @@ namespace NaraEyes.Domain.Entities.Devices
 {
     public sealed class Device : BaseEntity
     {
+        public bool InService { get; set; }
         public int? Code { get; private set; }
         public string Ip { get; private set; }
         public string? Model { get; private set; }
@@ -28,14 +29,14 @@ namespace NaraEyes.Domain.Entities.Devices
         public decimal? Latitude { get; private set; }
         public decimal? Longitude { get; private set; }
         public bool IsActive { get; private set; }
-        public ContactInfo? Operator { get;  set; }
-        public Guid? OperatorId { get;  set; }
+        public ContactInfo? Operator { get; set; }
+        public Guid? OperatorId { get; set; }
         public DateTime? LastHeartbeat { get; private set; }
         public string? AgentVersion { get; private set; }
         public byte[] RowVersion { get; private set; }
         public ICollection<DeviceEvent> Events { get; private set; } = new List<DeviceEvent>();
-        public MetricSnapshot? CurrentMetrics { get;  set; }
-        public Guid? CurrentMetricsId { get;  set; }
+        public MetricSnapshot? CurrentMetrics { get; set; }
+        public Guid? CurrentMetricsId { get; set; }
         public ICollection<CashUnit> CashUnits { get; private set; } = new List<CashUnit>();
         public ICollection<DeviceModule> Modules { get; private set; } = new List<DeviceModule>();
         public void SetErrorMode()
@@ -73,7 +74,7 @@ namespace NaraEyes.Domain.Entities.Devices
         }
         public void SetOffline()
         {
-           AgentStatus=false;
+            AgentStatus = false;
         }
         public void UpdateIdentity(int? code, string ip, string? model, string? serialNo)
         {
@@ -92,7 +93,7 @@ namespace NaraEyes.Domain.Entities.Devices
             MobileNo = NormalizeOrNull(mobileNo);
         }
 
- 
+
 
         public void SetMode(DeviceMode mode) => Mode = mode;
 
@@ -112,7 +113,7 @@ namespace NaraEyes.Domain.Entities.Devices
 
         public void SetAgentVersion(string? version) => AgentVersion = NormalizeOrNull(version);
 
-        public void SetInstallationDate(DateTime? installationDate) => InstallationDate = installationDate??DateTime.Now;
+        public void SetInstallationDate(DateTime? installationDate) => InstallationDate = installationDate ?? DateTime.Now;
 
         public void TouchHeartbeat(DateTime? whenUtc = null) => LastHeartbeat = whenUtc ?? DateTime.UtcNow;
 
@@ -174,7 +175,7 @@ namespace NaraEyes.Domain.Entities.Devices
             var d = new Device();
             d.ApplyRegistration(code, ip, model, serialNo, agentVersion);
             d.IsActive = true;
-            d.Mode = DeviceMode.Supervisor;               
+            d.Mode = DeviceMode.Supervisor;
             d.InstallationDate = DateTime.Now;
             d.Description ??= string.Empty;
             d.CreateDate = DateTime.Now;
@@ -198,7 +199,7 @@ string mobileNo
             d.Ip = ip;
             d.Code = code;
             d.Model = model;
-            d.SerialNo= serialNo;
+            d.SerialNo = serialNo;
             d.IsActive = true;
             d.Mode = DeviceMode.Supervisor;
             d.InstallationDate = DateTime.Now;
@@ -210,7 +211,7 @@ string mobileNo
             d.BranchId = branchId;
             d.MobileNo = mobileNo;
             d.IsActive = true;
-            
+
             return d;
         }
 
@@ -221,9 +222,10 @@ string mobileNo
 
 
 
-        public void ReRegister(string ip, string model, string? agentVersion)
+        public void ReRegister(int code,string ip, string model, string? agentVersion)
         {
             Ip = NormalizeIp(ip);
+            Code = code;
             AgentVersion = NormalizeVersion(agentVersion);
 
             if (string.IsNullOrWhiteSpace(Model))
@@ -233,14 +235,14 @@ string mobileNo
             LastHeartbeat = DateTime.Now;
 
             if (AgentStatus is false)
-               AgentStatus=true;
+                AgentStatus = true;
         }
         private void ApplyRegistration(
         int? code,
         string ip,
         string model,
         string? serialNo,
-        string? agentVersion )
+        string? agentVersion)
         {
             Code = code;
             Ip = NormalizeIp(ip);
@@ -256,18 +258,21 @@ string mobileNo
             LastHeartbeat = DateTime.Now;
             if (!IsActive) IsActive = true;
 
-  
-       if(AgentStatus is false) AgentStatus=true;
+
+            if (AgentStatus is false) AgentStatus = true;
         }
 
 
 
         /// <summary>غیرفعال/فعال‌سازی منطقی دستگاه</summary>
-        public void Activate() => IsActive = true;
+        public void Activate() { 
+            IsActive = true;
+            Deleted = false;
+        }
         public void Deactivate()
         {
+            Deleted = true;
             IsActive = false;
-           AgentStatus = false;
         }
 
         // ====== Version / Identity Changes ======
@@ -393,7 +398,7 @@ string mobileNo
 
         private static string NormalizeModel(string model)
         {
-            if (string.IsNullOrWhiteSpace(model)) throw new ArgumentException("Model is required.");
+            if (string.IsNullOrWhiteSpace(model)) model="-";
             model = model.Trim();
             if (model.Length > 100) model = model[..100];
             return model;

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using NaraEyes.Application.Abstraction.Identity;
+using NaraEyes.Application.Abstraction.Unitofwork;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Identity;
 using NaraEyes.Domain.Entities.Identity;
@@ -15,10 +16,12 @@ using System.Threading.Tasks;
 namespace NaraEyes.Infrastructure.IdentityRepository
 {
     internal class ApplicationRoleManager(RoleManager<Role> roleManager,
-          UserManager<User> userManager) : IApplicationRoleManager
+          UserManager<User> userManager,
+          IApplicationUnitOfWork _uow) : IApplicationRoleManager
     {
         private readonly RoleManager<Role> _roleManager = roleManager;
         private readonly UserManager<User> _userManager = userManager;
+        private readonly IApplicationUnitOfWork uow = _uow;
 
         /// <summary>
         /// افزودن نقش به کاربر
@@ -347,6 +350,31 @@ namespace NaraEyes.Infrastructure.IdentityRepository
 
             // در صورت موفقیت
             return op.succedded("نقش با موفقیت به‌روزرسانی شد");
+        }
+        public   async Task<bool> IsUserInRole(Guid userId, string roleName)
+        {
+            try
+            {
+
+         
+            if (string.IsNullOrWhiteSpace(roleName)) return false;
+            var normalized = roleName.Trim().ToUpperInvariant();
+
+            return await uow.UserRoles
+                .AsNoTracking()
+                .Where(ur => ur.UserId == userId)
+                .Join(uow.Roles.AsNoTracking(),
+                      ur => ur.RoleId,
+                      r => r.Id,
+                      (ur, r) => r.NormalizedName)
+                .AnyAsync(n => n == normalized);
+            }
+            catch (Exception ex)
+            {
+
+                return false;
+            }
+
         }
     }
 }

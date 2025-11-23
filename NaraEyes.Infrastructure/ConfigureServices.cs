@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NaraEyes.Application.Abstraction.Dapper;
 using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Infrastructure.ClockService;
+using NaraEyes.Infrastructure.Dapper;
 using NaraEyes.Infrastructure.IdentityRepository;
 using NaraEyes.Infrastructure.QueueImplemention;
 using NaraEyes.SharedKernel;
@@ -27,6 +29,8 @@ namespace NaraEyes.Infrastructure
             services.AddSingleton<ICommandAwaiter, CommandAwaiter>();
             services.AddSingleton<IAckAwaiter, AckAwaiter>();
             services.AddScoped<WebSocketPollHandler>();
+            services.AddSingleton<IDbConnectionFactory>(_ =>
+new DbConnectionFactory(configuration["ConnectionStrings:ApplicationDbContext"]));
 
 
             return services;

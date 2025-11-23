@@ -32,6 +32,7 @@ namespace NaraEyes.Application.Abstraction.Unitofwork
         public DbSet<InBoxDeviceMessage> InBoxDeviceMessages { get; }
         public DbSet<Campaign> Campaigns { get; }
         public DbSet<CampaignTarget> CampaignTargets { get; }
+       public DbSet<ArchivedDevice> ArchivedDevice { get; }
 
     }
 }

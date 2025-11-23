@@ -71,5 +71,12 @@ namespace NaraEyes.Application.Contracts.Interfaces.Modules
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
         Task<List<Cassette>> GetCassetInfo(string DeviceIp, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// دستگاه اینسرویس هست یا نه؟
+        /// </summary>
+        /// <param name="ip"></param>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        Task<bool> IsDeviceInservice(string ip,CancellationToken cancellationToken = default);
     }
 }

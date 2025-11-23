@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.Unitofwork;
@@ -6,14 +7,17 @@ using NaraEyes.Application.Contracts.Interfaces.Identity;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Identity;
 using NaraEyes.Domain.Entities.Identity;
+using System.Threading.Tasks;
 
 
 namespace NaraEyes.Application.Services.Identity
 {
-    public class UserService(IApplicationUnitOfWork uow, UserManager<User> userManager, SignInManager<User> SignInManager, IApplicationUserManager applicationUserManager) : IUserService
+    public class UserService(IApplicationUnitOfWork uow, AuthenticationStateProvider Auth, UserManager<User> userManager, SignInManager<User> SignInManager, IApplicationUserManager applicationUserManager) : IUserService
     {
         private readonly IApplicationUnitOfWork _uow = uow;
+        private readonly AuthenticationStateProvider auth = Auth;
         private readonly UserManager<User> _userManager = userManager;
+
         private readonly SignInManager<User> signInManager = SignInManager;
         private readonly IApplicationUserManager _applicationUserManager=applicationUserManager;
         public async Task<IReadOnlyList<UserViewModel>> AllUsers(CancellationToken cancellationToken)
@@ -49,6 +53,23 @@ namespace NaraEyes.Application.Services.Identity
           .ToListAsync(cancellationToken);
 
             return users;
+        }
+        public async Task<bool> IsUserInRole( string roleName)
+        {
+            try
+            {
+
+
+                if (string.IsNullOrWhiteSpace(roleName)) return false;
+                var state = await Auth.GetAuthenticationStateAsync();
+                return state.User?.IsInRole(roleName) ?? false;
+            }
+            catch (Exception ex)
+            {
+
+                return false;
+            }
+
         }
 
 

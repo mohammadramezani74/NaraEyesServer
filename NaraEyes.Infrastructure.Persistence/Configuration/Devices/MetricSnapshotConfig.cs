@@ -31,6 +31,8 @@ namespace NaraEyes.Infrastructure.Persistence.Configuration.Devices
                    .HasMaxLength(50);
             builder.Property(x => x.CpuModel)
             .HasMaxLength(150);
+            builder.Property(x => x.OsInfo)
+        .HasMaxLength(200);
 
 
             builder.Property(x => x.ExtraJson)

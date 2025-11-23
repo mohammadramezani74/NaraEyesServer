@@ -28,6 +28,10 @@ namespace NaraEyes.Application.Services.Modules
 
         public async Task<List<XfsModule>> GetModulesStatus(string DeviceIp, CancellationToken cancellationToken = default)
         {
+            try
+            {
+
+     
             var list = ModuleCreationHelper.CreateStableModules();
             List<Domain.Entities.Devices.DeviceModuleStatus>? modulStatuses = new();
 
@@ -142,9 +146,18 @@ namespace NaraEyes.Application.Services.Modules
 
             }
             return list;
+            }
+            catch (Exception ex)
+            {
+
+                return new List<XfsModule>();
+            }
         }
         public async Task<List<Cassette>> GetCassetInfo(string deviceIp, CancellationToken cancellationToken = default)
         {
+            try
+            {
+
             var result = new List<Cassette>();
 
             var atm = await _uow.Devices
@@ -189,6 +202,13 @@ namespace NaraEyes.Application.Services.Modules
                 if (m.Success && int.TryParse(m.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
                     return n;
                 return int.MaxValue; 
+            }
+
+            }
+            catch (Exception ex)
+            {
+
+                return new List<Cassette>();
             }
         }
         public async Task<CdmModuleViewModel> GetCdmInfoAndChart(Guid moduleId, CancellationToken ct = default)
@@ -341,6 +361,7 @@ namespace NaraEyes.Application.Services.Modules
             result.Ink=PtrHelper.GetInkStatus(dto.Ink);
             result.Toner=PtrHelper.GetTonerStatus(dto.Toner);
             result.Media=PtrHelper.GetMediaStatus(dto.Media);
+            result.Paper = EnumHelper.GetEnumDisplayName(dto.Paper);
 
 
 
@@ -472,6 +493,10 @@ result.AntiFraudModule=CameraHelper.MapAntiFraudModuleStatus(dto.AntiFraudModule
             return result;
         }
 
+        public async Task<bool> IsDeviceInservice(string ip, CancellationToken cancellationToken = default)
+        {
+            return await _uow.Devices.AnyAsync(x => x.Ip == ip && x.Mode == DeviceMode.InService);
+        }
     }
 
 

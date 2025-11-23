@@ -21,6 +21,8 @@ namespace NaraEyes.Domain.Entities.Devices
         public double? DiskUsage { get; private set; }      // درصد استفاده دیسک
         public double? TotalRamGb { get; set; }   // مثال: 2.0، 3.9
         public string? CpuModel { get; set; }       // دمای CPU (درجه سانتی‌گراد)
+        public string? OsInfo { get; set; }
+        public DateTime? AgentTime { get; set; }
 
         // 🌐 شبکه
         public int? NetworkLatencyMs { get; private set; }  // پینگ تا سرور
@@ -48,7 +50,9 @@ namespace NaraEyes.Domain.Entities.Devices
             bool pingOk,
             bool agentAlive,
             string agentVersion,
-            string? extraJson
+            string? extraJson,
+            string? osInfo,
+            DateTime? agenttime
            )
         {
             return new MetricSnapshot
@@ -69,7 +73,10 @@ namespace NaraEyes.Domain.Entities.Devices
                 AgentAlive = agentAlive,
                 AgentVersion = NormalizeVersion(agentVersion),
 
-                ExtraJson = NormalizeJson(extraJson)
+                ExtraJson = NormalizeJson(extraJson),
+                OsInfo= osInfo,
+                AgentTime= agenttime
+                
             };
         }
         public void Update(double? cpuUsage,
@@ -78,7 +85,7 @@ namespace NaraEyes.Domain.Entities.Devices
             int? networkLatencyMs,
             bool pingOk,
             bool agentAlive,
-            string agentVersion)
+            string agentVersion,string? osinfo,DateTime Agenttime)
         {
             CpuUsage = NormalizePercent(cpuUsage);
             RamUsage = NormalizePercent(ramUsage);
@@ -87,7 +94,9 @@ NetworkLatencyMs=networkLatencyMs;
             PingOk=pingOk;
             AgentAlive=agentAlive;
             AgentVersion=NormalizeVersion(agentVersion);
-            ModifiedDate = DateTime.Now;
+            ModifiedDate = DateTime.UtcNow;
+            OsInfo=osinfo;
+            AgentTime=Agenttime;
         }
 
         // ===== Behaviors =====

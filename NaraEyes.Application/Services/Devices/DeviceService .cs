@@ -1,13 +1,16 @@
 ﻿using ClosedXML.Excel;
+using Dapper;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.EntityFrameworkCore;
+using NaraEyes.Application.Abstraction.Dapper;
 using NaraEyes.Application.Abstraction.Identity;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Application.Abstraction.Unitofwork;
 using NaraEyes.Application.Contracts.Interfaces.Base;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
 using NaraEyes.Application.Contracts.Models.Basic;
+using NaraEyes.Application.Contracts.Models.DapperModels;
 using NaraEyes.Application.Contracts.Models.Devices;
 using NaraEyes.Application.Contracts.Models.Metrics;
 using NaraEyes.Application.Contracts.Models.Modules.Cam;
@@ -19,6 +22,7 @@ using NaraEyes.Domain.Entities.Devices;
 using NaraEyes.Domain.Enumerations;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.IO.Compression;
 using System.Linq;
@@ -40,9 +44,10 @@ namespace NaraEyes.Application.Services.Devices
         private readonly IApplicationUserManager _userManamager;
         private readonly ICommandDispatchState _dispatchState;
         private static readonly CultureInfo _gregorian = CreateGregorian();
+        private readonly IDbConnectionFactory _connectionFactory;
 
         public DeviceService(IApplicationUnitOfWork uow, ICommandAwaiter await, IOutboxService outbox, IAckAwaiter ack, AuthenticationStateProvider _auth,
-                  IApplicationUserManager userManamager, ICommandDispatchState dispatchState)
+                  IApplicationUserManager userManamager, ICommandDispatchState dispatchState, IDbConnectionFactory connectionFactory)
         {
             _uow = uow;
             _await = await;
@@ -51,6 +56,7 @@ namespace NaraEyes.Application.Services.Devices
             auth = _auth;
             _userManamager = userManamager;
             this._dispatchState = dispatchState;
+            _connectionFactory = connectionFactory;
         }
         private async Task<Guid?> GetUserId()
         {
@@ -66,19 +72,86 @@ namespace NaraEyes.Application.Services.Devices
             var type = OperationType.FileSend;
             return userId;
         }
-        public async Task DeactivateAsync(Guid deviceId, CancellationToken ct)
+        public async Task DeactivateAsync(Guid deviceId,string reson, CancellationToken ct)
         {
+            var userid = await GetUserId();
+            if (userid is null)
+                throw new InvalidOperationException("Current user id is null.");
             var device = await _uow.Devices.FirstOrDefaultAsync(d => d.Id == deviceId, ct);
             if (device == null)
                 throw new InvalidOperationException($"Device with Id {deviceId} not found");
 
+
             device.Deactivate();
+            var DeviceArchive= await _uow.ArchivedDevice.FirstOrDefaultAsync(x=>x.DeviceId == deviceId, ct);
+            if(DeviceArchive == null)
+            {
+              var archived=  ArchivedDevice.CreateArchive(deviceId, userid.Value, reson);
+                _uow.ArchivedDevice.Add(archived);
+            }
+            else
+            {
+                DeviceArchive.ArchivedAgain(userid.Value,reson);
+            }
+                await _uow.SaveChangesAsync(ct);
+        }
+        public async Task RestoreAsync(Guid deviceId, CancellationToken ct)
+        {
+         
+            var userId = await GetUserId();
+            if (userId is null)
+                throw new InvalidOperationException("Current user id is null.");
+
+           
+            var device = await _uow.Devices
+                .FirstOrDefaultAsync(d => d.Id == deviceId, ct);
+
+            if (device is null)
+                throw new InvalidOperationException($"Device with Id {deviceId} not found.");
+
+      
+            var archived = await _uow.ArchivedDevice
+                .FirstOrDefaultAsync(x => x.DeviceId == deviceId && !x.Deleted, ct);
+
+            if (archived is null)
+                throw new InvalidOperationException($"Active archive record for device {deviceId} not found.");
+
+
+            device.Activate(); 
+
+
+            archived.Restore(userId.Value);
+
             await _uow.SaveChangesAsync(ct);
+        }
+        public async Task<IReadOnlyList<ArcivedDeviceViewModel>> GatArchivedDevices(CancellationToken cancellationToken = default)
+        {
+            var query= await _uow.ArchivedDevice.AsNoTracking()
+                .Include(c=>c.CreatedByUser)
+                .Include(c=>c.Device)
+                .Where(x=>!x.Deleted)
+                .Select(x=>new ArcivedDeviceViewModel
+                {
+                    Id=x.DeviceId,
+                    DeletedAt=x.ModifiedDate!=null?x.ModifiedDate.Value.ToFarsiFull():x.CreateDate.ToFarsiFull(),
+                    DeletedBy = x.CreatedByUser != null
+                      ? (x.CreatedByUser.FirstName + " " + x.CreatedByUser.LastName)
+                         : "-",
+                    DeleteReson =x.ArchiveReason,
+                    Address = x.Device != null ? x.Device.Address : "-",
+                    Code = x.Device != null ? x.Device.Code :null,
+                    SerialNo = x.Device != null ? x.Device.SerialNo : "-",
+                    Ip = x.Device != null ? x.Device.Ip : "-",
+                    Model = x.Device != null ? x.Device.Ip : "-",
+                })
+                .ToListAsync(cancellationToken);
+            return query;
         }
 
         public async Task<IReadOnlyList<GetDevicesViewModel>> GetDevicesAsync(CancellationToken cancellationToken)
         {
             var allDevices = await _uow.Devices.AsNoTracking()
+                .Where(x=>!x.Deleted)
                   .Select(x => new GetDevicesViewModel
                   {
                       Ip = x.Ip,
@@ -128,6 +201,7 @@ namespace NaraEyes.Application.Services.Devices
                 model.Address, model.SerialNo, model.Tel, model.MobileNo, model.BranchId,
                 model.Description, model.Latitude, model.Longitude, model.IsActive, null, null);
             entity.Operator = contact;
+            if(contact!=null)
             entity.OperatorId = contact.Id;
 
 
@@ -171,13 +245,13 @@ namespace NaraEyes.Application.Services.Devices
             if (existing != null)
             {
 
-                existing.ReRegister(context.ip, context.model, context.agentVersion);
+                existing.ReRegister(context.TerminalCode,context.ip, context.model, context.agentVersion);
                 await _uow.SaveChangesAsync(ct);
                 return existing.Id;
             }
 
 
-            var device = Device.RegisterNew(context.code, context.ip, context.model, context.serialNo, context.agentVersion, context.mode);
+            var device = Device.RegisterNew(context.TerminalCode, context.ip, context.model, context.serialNo, context.agentVersion, context.mode);
             await _uow.Devices.AddAsync(device, ct);
             try
             {
@@ -193,17 +267,7 @@ namespace NaraEyes.Application.Services.Devices
             return device.Id;
         }
 
-        public async Task<Guid> ReRegisterAsync(string ip, string model, string? agentVersion, CancellationToken ct)
-        {
-            var device = await _uow.Devices.FirstOrDefaultAsync(d => d.Ip == ip, ct);
-            if (device == null)
-                throw new InvalidOperationException($"Device with IP {ip} not found");
 
-            device.ReRegister(ip, model, agentVersion);
-            await _uow.SaveChangesAsync(ct);
-
-            return device.Id;
-        }
 
         public async Task UpdateHeartbeatAsync(string ip, CancellationToken ct)
         {
@@ -225,6 +289,7 @@ namespace NaraEyes.Application.Services.Devices
                 .AsNoTracking()
                 .Include(d => d.Branch)
                 .Include(d => d.CashUnits)
+                .Where(x=>!x.Deleted)
                 .AsQueryable();
 
             // فیلترها...
@@ -335,7 +400,7 @@ namespace NaraEyes.Application.Services.Devices
                 return new DeviceViewModel
                 {
                     Id = d.Id,
-                    DisplayName = display,
+                    DisplayName = d.Code.ToString()??0.ToString(),
                     DeviceAgent=d.AgentStatus,
                     Ip = d.Ip,
                     SerialNo = d.SerialNo,
@@ -384,7 +449,7 @@ namespace NaraEyes.Application.Services.Devices
             {
                 Id = id,                         // ⬅️ مهم
                 DeviceIp = deviceIp,
-                CommandType = CommandType.Screenshot,
+                CommandType = Domain.Enumerations.CommandType.Screenshot,
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) // (اختیاری)
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
@@ -399,7 +464,7 @@ namespace NaraEyes.Application.Services.Devices
             {
                 Id = id,                         // ⬅️ مهم
                 DeviceIp = deviceIp,
-                CommandType = CommandType.ResetCdm,
+                CommandType = Domain.Enumerations.CommandType.ResetCdm,
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) // (اختیاری)
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
@@ -419,7 +484,7 @@ namespace NaraEyes.Application.Services.Devices
             {
                 Id = id,                         // ⬅️ مهم
                 DeviceIp = deviceIp,
-                CommandType = CommandType.Metrics,
+                CommandType = Domain.Enumerations.CommandType.Metrics,
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) 
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
@@ -497,7 +562,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             {
                 Id = id,                         // ⬅️ مهم
                 DeviceIp = deviceIp,
-                CommandType = CommandType.testprinter,
+                CommandType = Domain.Enumerations.CommandType.testprinter,
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) // (اختیاری)
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
@@ -514,7 +579,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             {
                 Id = id,                         // ⬅️ مهم
                 DeviceIp = deviceIp,
-                CommandType = CommandType.resetIdc,
+                CommandType = Domain.Enumerations.CommandType.resetIdc,
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) // (اختیاری)
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
@@ -531,7 +596,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             {
                 Id = id,                         
                 DeviceIp = deviceIp,
-                CommandType = CommandType.GetForcesStatus,
+                CommandType = Domain.Enumerations.CommandType.GetForcesStatus,
                 Payload = JsonSerializer.Serialize(new { CommandId = id }) 
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
@@ -555,7 +620,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
                 DeviceIp = deviceIp,
                 StartDate = startDay.ToString("yyyyMMdd", _gregorian),
                 EndDate = endDay.ToString("yyyyMMdd", _gregorian),
-                CommandType = CommandType.EJournal,
+                CommandType = Domain.Enumerations.CommandType.EJournal,
                 Payload = JsonSerializer.Serialize(new { CommandId = id })
             };
 
@@ -575,7 +640,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
         public async Task<bool> RestartOrShutdownDevice(bool isrestart, string deviceIp, CancellationToken cancellationToken = default)
         {
             var id = Guid.NewGuid();
-            var type = isrestart ? CommandType.Reset : CommandType.Shutdown;
+            var type = isrestart ? Domain.Enumerations.CommandType.Reset : Domain.Enumerations.CommandType.Shutdown;
 
             var cmd = new OutBoxDeviceMessage
             {
@@ -595,35 +660,99 @@ usage=x.CurrentMetrics.CpuUsage??0,
 
         public async Task<DeviceMetricsViewModel> GetMetricsAsync(string deviceIp, CancellationToken cancellationToken = default)
         {
-            var targetDevice = await _uow.Devices.
-                Include(m => m.CurrentMetrics)
-                .Include(x => x.Operator)
-                .Include(x => x.Branch)
-                .Where(x => x.Ip == deviceIp).AsNoTracking()
-                .Select(x => new DeviceMetricsViewModel
-                {
-                    Ip = x.Ip,
-                    DeviceModel = x.Model,
-                    DeviceSerial = x.SerialNo,
-                    DiskUsage = new ChartMetrics { usage = x.CurrentMetrics.DiskUsage ?? 0 },
-                    CpuModel = x.CurrentMetrics.CpuModel,
-                    DisplayName = x.Code.ToString(),
-                    AgentVersion = x.CurrentMetrics.AgentVersion,
-                    InstallationDate = x.InstallationDate.ToFarsi(),
-                    Branch = x.Branch.ShortName,
-                    CpuUsage = new ChartMetrics { usage = x.CurrentMetrics.CpuUsage ?? 0 },
-                    LastHeartBeat = x.CurrentMetrics.ModifiedDate.Value.ToFarsiFull(),
-                    OperatorMobile = x.Operator.PhoneNumber,
-                    OperatorName = x.Operator.Name,
-                    RamUsage = new ChartMetrics { usage = x.CurrentMetrics.RamUsage ?? 0 },
-                    TotalRam = x.CurrentMetrics.TotalRamGb.ToString() ?? "0",
-
-                }).FirstOrDefaultAsync(cancellationToken);
-            if (targetDevice == null)
+            try
             {
+
+         
+            const string sql = @"
+SELECT TOP (1)
+    d.Ip,
+    d.Model              AS DeviceModel,
+    d.SerialNo           AS DeviceSerial,
+    d.Code,
+d.Address,
+m.OsInfo,
+m.AgentTime,
+    d.InstallationDate,
+    b.ShortName          AS BranchShortName,
+    o.PhoneNumber        AS OperatorMobile,
+    o.Name               AS OperatorName,
+    m.DiskUsage,
+    m.CpuUsage,
+    m.RamUsage,
+    m.AgentVersion,
+    m.CpuModel,
+    m.ModifiedDate       AS MetricsModifiedDate,
+    m.TotalRamGb
+FROM Devices d
+    LEFT JOIN MetricSnapshots m ON d.CurrentMetricsId = m.Id
+    LEFT JOIN ContactInfos o     ON d.OperatorId       = o.Id
+    LEFT JOIN Branches b        ON d.BranchId         = b.Id
+WHERE d.Ip = @Ip";
+
+            using IDbConnection conn = _connectionFactory.GetOpenConnection();
+
+            var row = await conn.QueryFirstOrDefaultAsync<DeviceMetricsRow>(
+                sql,
+                new { Ip = deviceIp });
+
+            if (row is null)
                 return new DeviceMetricsViewModel();
+                string? HumanDrift = "ساعت با سرور هماهنگ است";
+                if (row.MetricsModifiedDate != null)
+                    { 
+                   var drift = row.AgentTime - row.MetricsModifiedDate;
+                     HumanDrift = FormatTimeDrift(drift.Value); }
+
+
+
+            var vm = new DeviceMetricsViewModel
+            {
+                Ip = row.Ip,
+                code=row.Code??0,
+                DeviceModel = row.DeviceModel,
+                DeviceSerial = row.DeviceSerial,
+                Address=row.Address,
+                WinModel=row.OsInfo,
+                Drift=HumanDrift,
+
+                DiskUsage = new ChartMetrics
+                {
+                    usage = row.DiskUsage ?? 0
+                },
+
+                CpuModel = row.CpuModel,
+                DisplayName = row.Code?.ToString(),
+
+                AgentVersion = row.AgentVersion,
+                InstallationDate = row.InstallationDate.ToFarsi(),     
+                Branch = row.BranchShortName,
+
+                CpuUsage = new ChartMetrics
+                {
+                    usage = row.CpuUsage ?? 0
+                },
+
+                LastHeartBeat = row.MetricsModifiedDate?.ToFarsiFull(), 
+
+                OperatorMobile = row.OperatorMobile,
+                OperatorName = row.OperatorName,
+
+                RamUsage = new ChartMetrics
+                {
+                    usage = row.RamUsage ?? 0
+                },
+
+                TotalRam = (row.TotalRamGb?.ToString() ?? "0")
+            };
+
+                return vm;
             }
-            return targetDevice;
+            catch (Exception ex)
+            {
+
+                throw;
+            }
 
 
         }
@@ -639,7 +768,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             {
                 Id = id,
                 DeviceIp = deviceIp,
-                CommandType = CommandType.UploadFile,  // نوع فرمان برای آپلود فایل
+                CommandType = Domain.Enumerations.CommandType.UploadFile,  // نوع فرمان برای آپلود فایل
                 Payload = JsonSerializer.Serialize(new { CommandId = id, FileData = base64FileContent,Extension= extension,Name= name })  // اطلاعات فایل
             };
 
@@ -978,8 +1107,38 @@ usage=x.CurrentMetrics.CpuUsage??0,
             var base64 = Convert.ToBase64String(bytes);
             return base64;
         }
+        private static string FormatTimeDrift(TimeSpan drift)
+        {
+            var abs = drift.Duration(); // مقدار قدرمطلق اختلاف
 
-     
+            // اگر اختلاف خیلی کم بود، بگو تقریبا هماهنگ است
+            if (abs < TimeSpan.FromSeconds(5))
+                return "ساعت دستگاه با سرور هماهنگ است (اختلاف کمتر از ۵ ثانیه).";
+
+            string direction = drift > TimeSpan.Zero ? "جلوتر" : "عقب‌تر";
+
+            var parts = new List<string>();
+
+            if (abs.Days > 0)
+                parts.Add($"{abs.Days} روز");
+
+            if (abs.Hours > 0)
+                parts.Add($"{abs.Hours} ساعت");
+
+            if (abs.Minutes > 0)
+                parts.Add($"{abs.Minutes} دقیقه");
+
+            // فقط اگر روز/ساعت/دقیقه نداشتیم، ثانیه را نشان بده
+            if (abs.Days == 0 && abs.Hours == 0 && abs.Minutes == 0 && abs.Seconds > 0)
+                parts.Add($"{abs.Seconds} ثانیه");
+
+            var spanText = string.Join(" و ", parts);
+
+            return $"ساعت دستگاه حدود {spanText} از سرور {direction} است.";
+        }
+
+
+
     }
 
 }

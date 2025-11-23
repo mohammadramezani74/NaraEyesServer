@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NaraEyes.Infrastructure.Persistence.Context;
 
@@ -11,9 +12,11 @@ using NaraEyes.Infrastructure.Persistence.Context;
 namespace NaraEyes.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251109194755_createTblArchived")]
+    partial class createTblArchived
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -859,9 +862,6 @@ namespace NaraEyes.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<bool>("InService")
-                        .HasColumnType("bit");
-
                     b.Property<DateTime>("InstallationDate")
                         .HasColumnType("datetime2");
 
@@ -1332,9 +1332,6 @@ namespace NaraEyes.Infrastructure.Persistence.Migrations
                     b.Property<bool>("AgentAlive")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime?>("AgentTime")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("AgentVersion")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1394,10 +1391,6 @@ namespace NaraEyes.Infrastructure.Persistence.Migrations
 
                     b.Property<int?>("NetworkLatencyMs")
                         .HasColumnType("int");
-
-                    b.Property<string>("OsInfo")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
 
                     b.Property<bool>("PingOk")
                         .HasColumnType("bit");

@@ -1,11 +1,22 @@
 ﻿@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Identity
+@inject IUserService service
 <MudPaper Width="250px" Elevation="0" Class="py-3">
     <MudNavMenu Color="Color.Info" Bordered="true">
         <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard" IconColor="Color.Secondary">داشبورد</MudNavLink>
         <MudNavLink Href="/devices" Icon="@Icons.Material.Filled.Devices" IconColor="Color.Secondary">دستگاه ها</MudNavLink>
         <MudNavLink Href="/bulk-operations" Icon="@Icons.Material.Filled.GroupWork" IconColor="Color.Secondary">عملیات گروهی</MudNavLink>
+      @if(IsFullAccess){
         <MudNavLink Href="/report" Icon="@Icons.Material.Filled.Newspaper" IconColor="Color.Secondary">گزارشات</MudNavLink>
+  
         <MudNavLink Href="/management" Icon="@Icons.Material.Filled.ManageAccounts" IconColor="Color.Secondary">مرکز مدیریت</MudNavLink>
-
+}
     </MudNavMenu>
 </MudPaper>
+@code{
+    bool IsFullAccess = false;
+    protected override async Task OnInitializedAsync()
+    {
+        IsFullAccess = await service.IsUserInRole("مدیریت مرکزی");
+    }
+}

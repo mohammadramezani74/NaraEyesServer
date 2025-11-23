@@ -156,16 +156,33 @@
 
     private async Task DeleteDevice(GetDevicesViewModel vm)
     {
-        var ok = await Dialog.ShowMessageBox("حذف دستگاه",
-            $"دستگاه با IP «{vm.Ip}» حذف شود؟",
-            yesText: "حذف", cancelText: "انصراف",
-            options: new DialogOptions { MaxWidth = MaxWidth.ExtraSmall });
-
-        if (ok is true)
+        var parameters = new DialogParameters
         {
+            ["DeviceIp"] = vm.Ip
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true,
+        };
+
+
+        var dialog = Dialog.Show<DeleteDeviceDialog>("حذف دستگاه", parameters, options);
+        var result = await dialog.Result;
+
+
+        if (result.Canceled)
+            return;
+
+
+        var reason = result.Data as string ?? string.Empty;
+
+     
             try
             {
-                await DeviceService.DeactivateAsync(vm.Id, CancellationToken.None);
+            await DeviceService.DeactivateAsync(vm.Id, reason, CancellationToken.None);
                 Snackbar.Add("غیرفعال شد.", Severity.Success);
                 await Load();
             }
@@ -173,7 +190,7 @@
             {
                 Snackbar.Add("حذف/غیرفعال‌سازی با خطا مواجه شد.", Severity.Error);
             }
-        }
+        
     }
     private async Task AddDevice(MouseEventArgs args)
     {

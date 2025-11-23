@@ -17,6 +17,8 @@ namespace NaraEyes.Application.Contracts.Models.Metrics
         public double? RamUsage { get; set; }
         public double? DiskUsage { get; set; }
         public double? CpuTemp { get; set; }
+        public string? OsFeatures { get; set; }
+        public DateTime AgentTime { get; set; }
 
         // شبکه
         public int? NetworkLatencyMs { get; set; }

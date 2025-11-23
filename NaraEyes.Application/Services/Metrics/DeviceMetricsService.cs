@@ -35,14 +35,14 @@ namespace NaraEyes.Application.Services.Metrics
             {
                 var newMetrics = MetricSnapshot.CreateNew(atm.Id, command.CpuUsage,
                       command.RamUsage, command.DiskUsage, command.TotalRamGb,
-                      command.CpuModel, command.NetworkLatencyMs, command.PingOk, command.AgentAlive, command.AgentVersion, null);
+                      command.CpuModel, command.NetworkLatencyMs, command.PingOk, command.AgentAlive, command.AgentVersion, null,command.OsFeatures,command.AgentTime);
                 atm.CurrentMetricsId = newMetrics.Id;
                 _uow.MetricSnapshots.Add(newMetrics);
             }
             else
             {
                 atm!.CurrentMetrics.Update(command.CpuUsage, command.RamUsage, command.DiskUsage, command.NetworkLatencyMs
-                    , command.PingOk, command.AgentAlive, command.AgentVersion);
+                    , command.PingOk, command.AgentAlive, command.AgentVersion, command.OsFeatures, command.AgentTime);
             }
 
   
@@ -62,7 +62,9 @@ namespace NaraEyes.Application.Services.Metrics
             Device? atm = await _uow.Devices.Include(x => x.Modules)
                 .Include(x=>x.CashUnits)
                                      .FirstOrDefaultAsync(x => x.Ip == command.DeviceIp, cancellationToken);
+        
             if (atm == null) { return op.Failed("دستگاهی یافت نشد!!"); }
+            var atmmode = atm.Mode;
 
             if (command.CdmStatus != null)
             {
@@ -231,6 +233,7 @@ namespace NaraEyes.Application.Services.Metrics
             mode = command.Mode;
 
             await _uow.SaveChangesAsync(cancellationToken);
+            if(mode!=atmmode)
             await _hubContext.Clients.All.SendAsync("ReceiveDeviceStatusUpdate", atm.Ip, mode);
 
             return op.succedded();
