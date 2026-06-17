@@ -111,14 +111,14 @@
                                 <MudText>@_vm.DeviceStatusFa</MudText>
                             </MudPaper>
 
-                            <!-- درها -->
+                            @* <!-- درها -->
                             @Section("درها", _vm.Doors)
 
                             <!-- واحدهای کمکی (Auxiliaries) -->
-                            @Section("واحدهای کمکی", _vm.Auxiliaries)
+                            @Section("واحدهای کمکی", _vm.Auxiliaries)*@
 
                             <!-- نماگرها (Indicators) -->
-                            @Section("نماگرها", _vm.Indicators)
+                            @Section("نماگرها", _vm.Indicators) 
 
                             <!-- چراغ‌های راهنما (Guid Lights) -->
                             @Section("چراغ‌های راهنما", _vm.GuidLights)

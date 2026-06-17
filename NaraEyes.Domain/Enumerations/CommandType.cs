@@ -31,6 +31,7 @@ namespace NaraEyes.Domain.Enumerations
         testprinter = 11,
         [Display(Name = "بارگزاری فایل")]
         UploadFile =12,
+        [Display(Name = "بروزرسانی نمودار")]
         Metrics = 13,
         [Display(Name = " بارگزاری فایل گروهی")]
         UploadGroupFile =14,

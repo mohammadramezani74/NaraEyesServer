@@ -9,11 +9,29 @@
         var state = await Auth.GetAuthenticationStateAsync();
         if (state.User?.Identity?.IsAuthenticated == true)
         {
-            Nav.NavigateTo("/dashboard", replace: true);
+            try
+            {
+                Nav.NavigateTo("/dashboard", replace: true);
+                return;
+            }
+            catch (Exception)
+            {
+                
+              
+            }
+   
         }
         else
         {
-            Nav.NavigateTo("/account/login", replace: true);
+            try
+            {
+    Nav.NavigateTo("/account/login", replace: true);
+            }
+            catch (Exception ex)
+            {
+                
+            }
+        
         }
     }
 }

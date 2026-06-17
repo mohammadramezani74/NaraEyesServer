@@ -229,7 +229,8 @@ namespace NaraEyes.Application.Services.Metrics
 
             }
 
-            atm.SetStatus(command.Mode);
+            atm.SetStatus(command.Mode,command.IsInservice);
+
             mode = command.Mode;
 
             await _uow.SaveChangesAsync(cancellationToken);

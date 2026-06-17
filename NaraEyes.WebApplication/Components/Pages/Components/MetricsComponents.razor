@@ -12,7 +12,6 @@
     </div>
     <div class="d-flex" style="gap:.5rem">
         <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Nav.NavigateTo("/devices"))">بازگشت</MudButton>
-        <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadFakeData">بارگذاری مجدد</MudButton>
     </div>
 </div>
 
@@ -218,9 +217,7 @@
                           Height="320px" />
             </MudCardContent>
 
-            <MudCardActions Class="px-3 pb-3">
-                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ReloadFakeData">بروزرسانی نمودار</MudButton>
-            </MudCardActions>
+
         </MudCard>
     </MudItem>
 </MudGrid>
@@ -270,31 +267,7 @@
     {
         ChartPalette = new[] { "#34d399", "#9E9E9E" } // Used / Free
     };
-    public async Task ReloadFakeData()
-    {
-        var result=  await _service.RequestGetMetricsAsync(DeviceIp);
-        if (result != null)
-        {
-            _cpuUsed = result.CpuUsage.usage;
-            _ramUsed = result.RamUsage.usage;
-            _diskUsed = result.DiskUsage.usage;
-            _device.CpuUsage.usage = result.CpuUsage.usage;
-            _device.RamUsage.usage = result.RamUsage.usage;
-            _device.DiskUsage.usage = result.DiskUsage.usage;
 
-            var used = new double[] { _device.CpuUsage.usage, _device.RamUsage.usage, _device.DiskUsage.usage };
-            var free = new double[] { _device.CpuUsage.free, _device.RamUsage.free, _device.DiskUsage.free };
-
-            _stackedSeries = new()
-                {
-                    new ChartSeries { Name = "Used %", Data = used
-        },
-                    new ChartSeries { Name = "Free %", Data = free }
-                };
-            StateHasChanged();
-        }
-    }
-    // gauges values
 
 
 

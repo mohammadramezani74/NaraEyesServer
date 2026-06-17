@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace NaraEyes.Application.Contracts.Models.Basic
 {
-    public class OperationResult
+     public class OperationResult
     {
         private const string SuccessMessage = "عملیات با موفقیت انجام شد";
         private const string FailedMessage = "عملیات انجام نشد";

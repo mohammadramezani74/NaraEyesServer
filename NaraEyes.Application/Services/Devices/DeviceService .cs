@@ -281,6 +281,9 @@ namespace NaraEyes.Application.Services.Devices
 
         public async Task<PageResultDto<DeviceViewModel>> GetAllDevicesAsync(DeviceFilterViewModel filter, CancellationToken cancellationToken = default)
         {
+            try
+            {
+
             var page = filter.Page <= 0 ? 1 : filter.Page;
             var pageSize = filter.PageSize <= 0 ? 20 : Math.Min(filter.PageSize, 200);
 
@@ -363,6 +366,12 @@ namespace NaraEyes.Application.Services.Devices
                 Total = total
             };
 
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
 
         }
 
@@ -400,6 +409,7 @@ namespace NaraEyes.Application.Services.Devices
                 return new DeviceViewModel
                 {
                     Id = d.Id,
+                    IsInservice=d.InService,
                     DisplayName = d.Code.ToString()??0.ToString(),
                     DeviceAgent=d.AgentStatus,
                     Ip = d.Ip,
@@ -530,7 +540,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             var name = "خوش آمدید!";
             var user= _uow.Users.Where(x=>x.UserName.ToLower().Trim()==userName.ToLower().Trim()).FirstOrDefault();
             var usersCount= await _uow.Users.CountAsync();
-            var devices = await _uow.Devices.AsNoTracking().ToListAsync(ct);
+            var devices = await _uow.Devices.AsNoTracking().Where(x=>!x.Deleted).ToListAsync(ct);
             var branchcount=await _uow.Branches.AsNoTracking().CountAsync(ct);
             var supervision = await _uow.SupervisionStates.AsNoTracking().CountAsync(ct);
             if (user != null) {
@@ -538,19 +548,21 @@ usage=x.CurrentMetrics.CpuUsage??0,
                     }
             return new HomeChartsViewModel
             {
-                InServiceCount = devices.Where(x => x.Mode == DeviceMode.InService).Count(),
+                InServiceCount = devices.Where(x => x.InService).Count(),
                 errorCount = devices.Where(x => x.Mode == DeviceMode.Error).Count(),
-                warningCount = devices.Where(x => x.Mode == DeviceMode.warning).Count(),
+                warningCount = devices.Where(x => x.Mode is DeviceMode.warning or DeviceMode.warning_Money or DeviceMode.warning_paper).Count(),
                 offlineCount = devices.Where(x => x.Mode == DeviceMode.Offline).Count(),
                 OnlineCount= devices.Where(x => x.Mode == DeviceMode.Online).Count(),
-                OutOfService= devices.Where(x => x.Mode == DeviceMode.Supervisor).Count() + devices.Where(x => x.Mode == DeviceMode.Error).Count()+
-                devices.Where(x => x.Mode == DeviceMode.Offline).Count(),
+                OutOfService= devices.Where(x => !x.InService).Count() ,
                 TotalDevice =devices.Count(),
                 BranchCount= branchcount,
                 Supervisions= supervision,
                 Name=name,
                 TotalUsers=usersCount,
-
+                inserviceErrors=devices.Where(x=>x.InService&&x.Mode==DeviceMode.Error).Count(),
+                inserviceWarning = devices.Where(x => x.InService && (x.Mode == DeviceMode.warning||x.Mode==DeviceMode.warning_paper||x.Mode==DeviceMode.warning_Money)).Count(),
+                OutofserviceErrors= devices.Where(x => !x.InService && x.Mode == DeviceMode.Error).Count(),
+                OutOfserviceWarning = devices.Where(x => !x.InService && (x.Mode == DeviceMode.warning || x.Mode == DeviceMode.warning_paper || x.Mode == DeviceMode.warning_Money)).Count(),
             };
                 
         }

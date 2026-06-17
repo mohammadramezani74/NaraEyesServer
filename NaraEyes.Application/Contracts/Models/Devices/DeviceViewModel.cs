@@ -10,6 +10,7 @@ namespace NaraEyes.Application.Contracts.Models.Devices
     public class DeviceViewModel
     {
         public Guid Id { get; set; }
+        public bool  IsInservice { get; set; }
         public string DisplayName { get; set; } = string.Empty;
         public bool DeviceAgent { get; set; }
         public string Ip { get; set; } = string.Empty;

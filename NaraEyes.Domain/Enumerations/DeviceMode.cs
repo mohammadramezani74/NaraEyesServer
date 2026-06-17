@@ -21,7 +21,11 @@ namespace NaraEyes.Domain.Enumerations
         [Display(Name = "آفلاین")]
         Offline =5,
         [Display(Name = "آنلاین")]
-        Online =6
+        Online =6,
+        [Display(Name = " (هشدار (کمبود کاغذ")]
+        warning_paper = 7,
+        [Display(Name = " (هشدار (کمبود پول")]
+        warning_Money = 8,
 
     }
 }

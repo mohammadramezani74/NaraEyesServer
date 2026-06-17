@@ -43,9 +43,10 @@ namespace NaraEyes.Domain.Entities.Devices
         {
             Mode = DeviceMode.Error;
         }
-        public void SetStatus(DeviceMode mode)
+        public void SetStatus(DeviceMode mode,bool inService)
         {
             Mode = mode;
+            InService=inService;
         }
         public void SetWarningMode()
         {

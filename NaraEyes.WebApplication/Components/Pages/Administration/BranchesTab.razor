@@ -1,6 +1,7 @@
 ﻿@using CurrieTechnologies.Razor.SweetAlert2
 @using MudBlazor
 @using System.Net.Http.Json
+@using NaraEyes.Application.Abstraction.Logger
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Models.Basic
 @using NaraEyes.WebApplication.Components.Dialogs
@@ -9,6 +10,7 @@
 @inject IBranchService BranchService
 @inject IJSRuntime JS
 @inject SweetAlertService Swal;
+@inject IAppLogger _logger
 
 <MudPaper Class="p-3 rounded-2xl mt-2">
 
@@ -149,6 +151,7 @@
 
         if (!result.Canceled && result.Data is bool ok && ok)
         {
+        
             Snackbar.Add("شعبه با موفقیت ثبت شد.", Severity.Success);
             await Load();
         }

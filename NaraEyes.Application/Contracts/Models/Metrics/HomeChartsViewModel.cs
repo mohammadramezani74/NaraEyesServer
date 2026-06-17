@@ -15,6 +15,11 @@ namespace NaraEyes.Application.Contracts.Models.Metrics
         public int Supervisions { get; set; }
         public string Name { get; set; }
         public int TotalUsers { get; set; }
+        public int inserviceErrors { get; set; }
+        public int inserviceWarning { get; set; }
+        public int OutofserviceErrors { get; set; }
+        public int OutOfserviceWarning { get; set; }
+
 
     }
 }

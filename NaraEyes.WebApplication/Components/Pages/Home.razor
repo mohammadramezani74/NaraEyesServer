@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using MudBlazor
+@using NaraEyes.Application.Abstraction.Logger
 @using NaraEyes.Application.Contracts.Interfaces.Devices
 @using NaraEyes.Application.Contracts.Models.Devices
 @using NaraEyes.Application.Contracts.Models.Metrics
@@ -89,7 +90,7 @@
         </MudItem>
 
 <MudItem xs="12" md="8">
-            <MudPaper Class="p-4 rounded-2xl" Style="@(_selectedStatusIndex==1? "height: 541px;":"")">
+            <MudPaper Class="p-4 rounded-2xl" Style="@(_selectedStatusIndex!=-1? "height: 541px;":"")">
         <div class="d-flex justify-space-between align-center mb-2">
             @if (_selectedStatusIndex == 1)
             {
@@ -106,6 +107,21 @@
                     بازگشت
                 </MudChip>
             }
+               else if (_selectedStatusIndex == 0)
+                    {
+                        <div>
+                            <MudText Typo="Typo.subtitle1">جزئیات دستگاه‌های InService</MudText>
+                            <MudText Typo="Typo.caption" Class="text-secondary">
+                                تفکیک دستگاه‌های دارای هشدار و دارای خطا
+                            </MudText>
+                        </div>
+                        <MudChip T="string" OnClick="@ResetStatusSelection"
+                                 Variant="Variant.Outlined"
+                                 Color="Color.Default"
+                                 Size="Size.Small">
+                            بازگشت
+                        </MudChip>
+                    }
             else
             {
                 <div>
@@ -117,16 +133,24 @@
             }
         </div>
 
-        @if (_selectedStatusIndex == 1)
+                @if (_selectedStatusIndex == 1)
         {
             <!-- نمودار میله‌ای Breakdown OutOfService -->
             <MudChart ChartType="ChartType.StackedBar"
                       XAxisLabels="@_outOfServiceLabels"
                       ChartSeries="@_outOfServiceSeries"
                       ChartOptions="@_outOfServiceOptions"
-                      Style="height:320px" />
-        }
-        else
+                    Style="height:520px" />
+         }
+                else if (_selectedStatusIndex == 0)
+                {
+                    <MudChart ChartType="ChartType.StackedBar"
+                              XAxisLabels="@_inserviceLables"
+                              ChartSeries="@_inServiceSeries"
+                              ChartOptions="@_inServiceOptions"
+                              Style="height:320px" />
+                }
+                else
         {
             <!-- حالت عادی: Top 10 شعبه -->
             <MudChart ChartType="ChartType.Bar"
@@ -250,7 +274,7 @@ private static CultureInfo CreateFaCulture()
     private DateTime now = DateTime.Now;
     private System.Timers.Timer? clockTimer;
 
-    private int _selectedStatusIndex;
+    private int _selectedStatusIndex=-1;
 
     private int totalDevices;
     private int inServiceCount;
@@ -259,36 +283,63 @@ private static CultureInfo CreateFaCulture()
     private int warningCount;
     private int errorCount;
     private int offlineCount;
+    private int inserviceErrors;
+    private int inserviceWarning;
+    private int OutofserviceErrors;
+    private int OutOfserviceWarning;
     private int totalBranches;
     private int totalSupervision;
     private int totalUsers;
     private string[] _outOfServiceLabels = Array.Empty<string>();
+    private string[] _inserviceLables = Array.Empty<string>();
     private List<ChartSeries> _outOfServiceSeries = new();
     private ChartOptions _outOfServiceOptions = new()
     {
-        ChartPalette = new[] { "#9CA3AF", "#EF4444" } // خاکستری برای Offline، قرمز برای Error
+        ChartPalette = new[] {  "#EF4444", "#F59E0B" } 
+    };
+    private List<ChartSeries> _inServiceSeries = new();
+    private ChartOptions _inServiceOptions = new()
+    {
+        ChartPalette = new[] {  "#EF4444", "#F59E0B" } 
     };
     private void ResetStatusSelection()
     {
-        _selectedStatusIndex = 0;
+        _selectedStatusIndex = -1;
+        StateHasChanged();
     }
     private void BuildOutOfServiceBreakdown()
     {
-        _outOfServiceLabels = new[] { "آفلاین", "دارای خطا" };
+        _outOfServiceLabels = new[] { "دارای خطا" ,"دارای هشدار"};
+        _inserviceLables = new[] {  "دارای خطا", "دارای هشدار" };
 
         _outOfServiceSeries = new()
     {
-        new ChartSeries
-        {
-            Name = "دستکاه های آفلاین",
-            Data = new double[] { offlineCount, 0 }
-        },
+        
+     
            new ChartSeries
         {
             Name = "دستکاه های خطادار",
-            Data = new double[] { 0, errorCount }
+            Data = new double[] { OutofserviceErrors, 0 }
+        },
+         new ChartSeries
+        {
+            Name = "دستگاه های هشدار",
+            Data = new double[] { 0, OutOfserviceWarning }
         }
     };
+        _inServiceSeries = new()
+        {
+               new ChartSeries
+        {
+            Name = "دستکاه های خطادار",
+            Data = new double[] { inserviceErrors, 0 }
+        },
+         new ChartSeries
+        {
+            Name = "دستگاه های هشدار",
+            Data = new double[] { 0, inserviceWarning }
+        }
+        };
     }
 
     // ---- Donut (Pie/Donut = Input*) ----
@@ -296,29 +347,29 @@ private static CultureInfo CreateFaCulture()
     private double[] statusData = Array.Empty<double>();
 
     // ---- Line (Line/Bar = ChartSeries + XAxisLabels) ----
-    private string[] dayLabels = Array.Empty<string>();   // برچسب 10 روز اخیر
-    private List<ChartSeries> trendSeries = new();        // [0]=InService (% آبی), [1]=Errors (% قرمز)
+    private string[] dayLabels = Array.Empty<string>();   
+    private List<ChartSeries> trendSeries = new();       
     private ChartOptions trendOptions = new()
     {
-        ChartPalette = new[] { "#1976D2", "#E53935" }     // آبی، قرمز
+        ChartPalette = new[] { "#1976D2", "#E53935" }    
     };
 
     // ---- Bar Overview (۳ ستون رنگ‌متفاوت) ----
-    private string[] overviewLabels = Array.Empty<string>();  // ["کل دستگاه‌ها","تعداد شعب","تعداد کاربران"]
-    private List<ChartSeries> overviewSeries = new();         // هر ستون = یک سری
+    private string[] overviewLabels = Array.Empty<string>(); 
+    private List<ChartSeries> overviewSeries = new();        
     private ChartOptions barOptions = new()
     {
-        ChartPalette = new[] { "#64B5F6", "#34D399", "#8B5CF6", "#FBBF24" }, // آبی، سبز، قرمز
+        ChartPalette = new[] { "#64B5F6", "#34D399", "#8B5CF6", "#FBBF24" }, 
 
     };
     private void OnStatusSliceChanged(int index)
     {
-        _selectedStatusIndex = (index == 1) ? 1 :0;
+        _selectedStatusIndex = index;
     }
 
-       private ChartOptions chartOptions = new()
+    private ChartOptions chartOptions = new()
     {
-        ChartPalette = new[] { "#34D399","#B91C1C" }, // آبی، سبز، قرمز
+        ChartPalette = new[] { "#34D399","#B91C1C" }, 
 
     };
 
@@ -340,6 +391,10 @@ private static CultureInfo CreateFaCulture()
             OnlineCount = data.OnlineCount;
             userName = data.Name;
             totalUsers = data.TotalUsers;
+            OutofserviceErrors = data.OutofserviceErrors;
+            OutOfserviceWarning = data.OutOfserviceWarning;
+            inserviceErrors = data.inserviceErrors;
+            inserviceWarning = data.inserviceWarning;
         }
         BuildOutOfServiceBreakdown();
         await LoadTopBranchesChartAsync();
@@ -399,7 +454,7 @@ private static CultureInfo CreateFaCulture()
         };
     }
 
-    // --- نمودار میله‌ای نمای کلی (۳ ستون با رنگ‌های متفاوت و پهن) ---
+
     private void GenerateOverviewBar()
     {
         overviewLabels = new[] { "کل دستگاه‌ها", "تعداد شعب", "سرپرستی ها","کاربران" };
@@ -407,7 +462,7 @@ private static CultureInfo CreateFaCulture()
         // اعداد فیک
 
 
-        // هر ستون = یک سری جدا (برای رنگ متفاوت)
+      
         overviewSeries = new()
         {
             new ChartSeries { Name = "کل دستگاه‌ها",  Data = new double[] { totalDevices,   0,             0 , 0} },

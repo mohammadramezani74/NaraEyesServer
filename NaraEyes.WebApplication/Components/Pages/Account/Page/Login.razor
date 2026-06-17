@@ -1,6 +1,7 @@
 ﻿@page "/account/login"
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Components.Authorization
+@using NaraEyes.Application.Abstraction.Logger
 @using NaraEyes.Application.Contracts.Interfaces.Identity
 @using NaraEyes.Application.Contracts.Models.Identity
 @using NaraEyes.Domain.Entities.Identity
@@ -11,7 +12,7 @@
 @inject ICaptchaManager Captcha
 @inject ILoginRateLimiter LoginLimiter
 @inject IUserService _userService
-@inject ILogger<Login> Logger
+@inject IAppLogger _logger
 
 <div class="page-bg" dir="rtl">
     <div class="login-card">
@@ -168,10 +169,18 @@
         {
             error = null;
             isBusy = true;
-
             var ip = Http.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+            var userAgent = Http.HttpContext?.Request.Headers["User-Agent"].ToString();
+
+            _logger.Info("Login attempt started. UserName: {UserName}, IP: {IP}",
+                loginModel.UserName, ip);
+
+
             if (!LoginLimiter.IsAllowed(loginModel.UserName, ip))
             {
+                _logger.Warn("Login blocked due to rate limit. UserName: {UserName}, IP: {IP}",
+       loginModel.UserName, ip);
+
                 error = "تعداد تلاش‌ها زیاد است. چند لحظه دیگر دوباره تلاش کنید.";
                 RefreshCaptcha();
                 return;
@@ -181,6 +190,8 @@
             var captchaOk = Captcha.ValidateAndConsume(loginModel.CaptchaToken, loginModel.CaptchaCode);
             if (!captchaOk)
             {
+                _logger.Warn("Captcha failed. UserName: {UserName}, IP: {IP}",
+    loginModel.UserName, ip);
                 error = "کد امنیتی نادرست یا منقضی است.";
                 RefreshCaptcha();
                 return;
@@ -194,26 +205,39 @@
 
             if (result.Succeeded)
             {
+                _logger.Info("Login succeeded. UserName: {UserName}, IP: {IP}",
+     loginModel.UserName, ip);
                 await _userService.SigninUser(loginModel.UserName!);
                 Http.HttpContext!.Response.Redirect("/dashboard");
                 return;
             }
             else if (result.IsLockedOut)
             {
+                _logger.Warn("User locked out. UserName: {UserName}, IP: {IP}",
+           loginModel.UserName, ip);
                 error = "حساب شما موقتاً قفل شد. لطفاً بعداً تلاش کنید.";
-                Logger.LogWarning("User {User} locked out from IP {IP}", loginModel.UserName, ip);
             }
             else if (result.RequiresTwoFactor)
             {
+                _logger.Info("2FA required. UserName: {UserName}, IP: {IP}",
+           loginModel.UserName, ip);
                 error = "احراز هویت دومرحله‌ای فعال است.";
             }
             else
             {
+                _logger.Warn("Login failed (invalid credentials). UserName: {UserName}, IP: {IP}",
+      loginModel.UserName, ip);
+
+   
                 error = "نام کاربری یا رمز عبور نادرست است.";
             }
         }
         catch (Exception ex)
         {
+            _logger.Error(ex,
+    "Unexpected error during login. UserName: {UserName}, IP: {IP}",
+    loginModel.UserName,
+    Http.HttpContext?.Connection?.RemoteIpAddress?.ToString());
             Console.WriteLine(ex);
             error = "خطای غیرمنتظره رخ داد. لطفاً مجدداً تلاش کنید.";
         }

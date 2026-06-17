@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using NaraEyes.Application;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
@@ -14,6 +14,12 @@ using NaraEyes.Infrastructure.Persistence.Context;
 using NaraEyes.WebApplication;
 using NaraEyes.WebApplication.Components;
 using NaraEyes.WebApplication.Extensions;
+using Serilog;
+using Serilog.Events;
+using Serilog.Exceptions;
+using Serilog.Sinks.MSSqlServer;
+using System.Collections.ObjectModel;
+using System.Data;
 using System.Globalization;
 
 
@@ -34,6 +40,73 @@ builder.Services.AddRazorComponents()
 builder.Services.AddMudServices();
 builder.Services.AddSignalR();
 builder.Services.AddCascadingAuthenticationState();
+var columnOptions = new ColumnOptions();
+
+// ستون‌های پیش‌فرض مهم
+columnOptions.Store.Remove(StandardColumn.Properties); // مهم: جلوگیری از تداخل
+
+
+columnOptions.AdditionalColumns = new Collection<SqlColumn>
+{
+    new SqlColumn
+    {
+        ColumnName = "UserName",
+        PropertyName = "UserName",
+        DataType = SqlDbType.NVarChar,
+        DataLength = 256
+    },
+    new SqlColumn
+    {
+        ColumnName = "IP",
+        PropertyName = "IP",
+        DataType = SqlDbType.NVarChar,
+        DataLength = 50
+    },
+    new SqlColumn
+    {
+        ColumnName = "UserAgent",
+        PropertyName = "UserAgent",
+        DataType = SqlDbType.NVarChar,
+        DataLength = 500
+    },
+    new SqlColumn
+    {
+        ColumnName = "RequestId",
+        PropertyName = "RequestId",
+        DataType = SqlDbType.NVarChar,
+        DataLength = 100
+    }
+};
+
+
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithThreadId()
+    .Enrich.WithProcessId()
+    .Enrich.WithExceptionDetails()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "Logs/log-.txt",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        shared: true,
+        flushToDiskInterval: TimeSpan.FromSeconds(1))
+    .WriteTo.MSSqlServer(
+        connectionString: builder.Configuration.GetConnectionString("ApplicationDbContext"),
+        sinkOptions: new MSSqlServerSinkOptions
+        {
+            TableName = "Logs",
+            AutoCreateSqlTable = true
+        },
+        columnOptions: columnOptions,
+        restrictedToMinimumLevel: LogEventLevel.Information
+    )
+    .CreateLogger();
+builder.Host.UseSerilog();
 
 builder.Services.RegisterPersistenceServices(builder.Configuration)
     .RegisterPresentationServices(builder.Configuration)
@@ -44,6 +117,19 @@ builder.Services.AddMemoryCache();
 
 var app = builder.Build();
 
+//app.UseSerilogRequestLogging(options =>
+//{
+//    options.MessageTemplate =
+//        "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+
+//    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+//    {
+//        diagnosticContext.Set("UserName", httpContext.User.Identity?.Name ?? "Anonymous");
+//        diagnosticContext.Set("IP", httpContext.Connection.RemoteIpAddress?.ToString());
+//        diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
+//        diagnosticContext.Set("RequestId", httpContext.TraceIdentifier);
+//    };
+//});
 
 if (!app.Environment.IsDevelopment())
 {
@@ -59,9 +145,11 @@ using (var scope = app.Services.CreateScope())
 }
 app.UseStaticFiles();
 app.UseCors("CorsPolicy");
+app.UseMiddleware<LicenseMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseMiddleware<LoggingMiddleware>();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -149,4 +237,16 @@ app.MapPost("/api/device/AgentMode", async (
 
 
 
-app.Run();
+try
+{
+    Log.Information("Application starting up");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application failed to start");
+}
+finally
+{
+    Log.CloseAndFlush();
+}

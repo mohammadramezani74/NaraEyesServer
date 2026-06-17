@@ -2,12 +2,14 @@
 @inject IReportService repService
 @inject ISnackbar snackbar
 @inject IJSRuntime JS
+@inject IAppLogger _logger
 @inject IDialogService DialogService
 @using Microsoft.AspNetCore.Authorization
 @using MudBlazor
 @using System.Net.Http.Json
 @using System.Threading
 @using System.Globalization
+@using NaraEyes.Application.Abstraction.Logger
 @using NaraEyes.Application.Contracts.Interfaces.Reports
 @using NaraEyes.Application.Contracts.Models.Reports
 @using NaraEyes.Application.Contracts.Utilities
@@ -267,6 +269,12 @@
 
     private async Task ExportToExcel(int function)
     {
+        _logger.Info(
+           "Excel export requested. ReportType={ReportType}, Search={Search}, StartDate={StartDate}, EndDate={EndDate}",
+           function,
+           searchString,
+           StartDate,
+           EndDate);
         if (function == 1)
         {
             var filter = new ReportFilterModel
@@ -282,7 +290,9 @@
 
             var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             var fileName = $"گزارش-فعالیت کاربران-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
-
+            _logger.Info(
+             "User activity report exported successfully. FileName={FileName}",
+             fileName);
 
             await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
         }
@@ -303,7 +313,9 @@
             var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             var fileName = $"گزارش آپلود گروهی فایل-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
 
-
+            _logger.Info(
+               "File upload report exported successfully. FileName={FileName}",
+               fileName);
             await JS.InvokeVoidAsync("downloadBase64File", mime, base64, fileName);
         }
         else if (function == 3)

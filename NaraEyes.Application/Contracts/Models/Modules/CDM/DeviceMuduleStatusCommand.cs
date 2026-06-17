@@ -9,6 +9,7 @@ namespace NaraEyes.Application.Contracts.Models.Modules.CDM
 {
     public class DeviceMuduleStatusCommand
     {
+        public bool IsInservice { get; set; }
         public DeviceMode Mode { get; set; }
         public string DeviceIp { get; set; } = null!;
         public CdmStatusDto? CdmStatus { get; set; }

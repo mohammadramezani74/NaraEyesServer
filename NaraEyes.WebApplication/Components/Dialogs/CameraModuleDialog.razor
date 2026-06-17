@@ -102,22 +102,17 @@
                 <MudTabPanel Text="اطلاعات وضعیت" Icon="@Icons.Material.Filled.Info" DisableRipple="true">
                     <div class="p-5">
                         <MudStack Row =false Spacing="1">
-                        <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
-                            @CardFor("دوربین", _vm.ROOM?.lable)
-                                @CardFor("وضعیت رسانه ", _vm.ROOM?.Media)
-                                @CardFor("وضعیت دوربین", _vm.ROOM?.Camera)
-                                @CardFor("وضعیت عکس های ذخیره شده", _vm.ROOM?.Picture)
-                        </MudStack>
+                   
                             <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
                                 @CardFor("دوربین", _vm.PERSON?.lable)
                                 @CardFor("وضعیت رسانه ", _vm.PERSON?.Media)
-                                @CardFor("وضعیت دوربین", _vm.PERSON?.Camera)
+                                @* @CardFor("وضعیت دوربین", _vm.PERSON?.Camera) *@
                                 @CardFor("وضعیت عکس های ذخیره شده", _vm.PERSON?.Picture)
                             </MudStack>
                             <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
                                 @CardFor("دوربین", _vm.EXITSLOT?.lable)
                                 @CardFor("وضعیت رسانه ", _vm.EXITSLOT?.Media)
-                                @CardFor("وضعیت دوربین", _vm.EXITSLOT?.Camera)
+                                @* @CardFor("وضعیت دوربین", _vm.EXITSLOT?.Camera) *@
                                 @CardFor("وضعیت عکس های ذخیره شده", _vm.EXITSLOT?.Picture)
                             </MudStack>
                         </MudStack>

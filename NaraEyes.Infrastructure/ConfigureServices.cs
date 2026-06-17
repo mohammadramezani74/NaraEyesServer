@@ -2,10 +2,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using NaraEyes.Application.Abstraction.Dapper;
 using NaraEyes.Application.Abstraction.Identity;
+using NaraEyes.Application.Abstraction.License;
+using NaraEyes.Application.Abstraction.Logger;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Infrastructure.ClockService;
 using NaraEyes.Infrastructure.Dapper;
 using NaraEyes.Infrastructure.IdentityRepository;
+using NaraEyes.Infrastructure.License;
+using NaraEyes.Infrastructure.logger;
 using NaraEyes.Infrastructure.QueueImplemention;
 using NaraEyes.SharedKernel;
 using System;
@@ -32,7 +36,8 @@ namespace NaraEyes.Infrastructure
             services.AddSingleton<IDbConnectionFactory>(_ =>
 new DbConnectionFactory(configuration["ConnectionStrings:ApplicationDbContext"]));
 
-
+            services.AddScoped<IAppLogger,AppLogger>();
+           services.AddScoped<ILicenseValidationService, LicenseValidationService>();
             return services;
         }
     }

@@ -11,11 +11,13 @@ using System.Threading.Tasks;
 
 namespace NaraEyes.Infrastructure.Persistence.Unitofwork
 {
-    public partial class ApplicationUnitOfWork(ApplicationDbContext applicationDbContext)
+    public partial class ApplicationUnitOfWork(IDbContextFactory<ApplicationDbContext> contextFactory)
     : IApplicationUnitOfWork
     {
-        private readonly ApplicationDbContext _context = applicationDbContext;
-
+        private readonly IDbContextFactory<ApplicationDbContext> _contextFactory= contextFactory;
+        private ApplicationDbContext? _context;
+        private ApplicationDbContext Context
+    => _context ??= _contextFactory.CreateDbContext();
 
 
         public async Task<OperationResult> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -23,7 +25,7 @@ namespace NaraEyes.Infrastructure.Persistence.Unitofwork
             var op = new OperationResult();
             try
             {
-                await _context.SaveChangesAsync(cancellationToken);
+                await Context.SaveChangesAsync(cancellationToken);
 
 
                 return op.succedded();
@@ -41,20 +43,28 @@ namespace NaraEyes.Infrastructure.Persistence.Unitofwork
 
         public async Task<int> ExecuteDeleteAsync<T>(Expression<Func<T, bool>> predicate) where T : class
         {
-            return await _context.Set<T>()
+            return await Context.Set<T>()
                 .Where(predicate)
                 .ExecuteDeleteAsync();
         }
         public void Dispose()
         {
-            _context.Dispose();
+            if (_context is not null)
+            {
+                _context.Dispose();
+                _context = null;
+            }
+
             GC.SuppressFinalize(this);
         }
 
         public async ValueTask DisposeAsync()
         {
-            await _context.DisposeAsync();
-            GC.SuppressFinalize(this);
+            if (_context is not null)
+            {
+                await _context.DisposeAsync();
+                _context = null;
+            }
         }
     }
 }

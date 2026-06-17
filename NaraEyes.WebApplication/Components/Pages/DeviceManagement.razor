@@ -2,6 +2,7 @@
 @using System.Threading
 @using Microsoft.AspNetCore.Authorization
 @using MudBlazor
+@using NaraEyes.Application.Abstraction.Logger
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Interfaces.Devices
 @using NaraEyes.Application.Contracts.Interfaces.Identity
@@ -16,6 +17,7 @@
 @inject IDialogService DialogService
 @inject IJSRuntime JS
 @inject IUserService userService
+@inject IAppLogger _logger;
 @inject NavigationManager Nav
 @implements IAsyncDisposable
 @attribute [Authorize(Roles = "مدیریت استان,مدیریت مانیتورینگ,مدیریت مرکزی")]
@@ -38,7 +40,7 @@
             <MudSelectItem T="DeviceMode?" Value="@((DeviceMode?)null)">همه وضعیت‌ها</MudSelectItem>
             @foreach (var s in Enum.GetValues<DeviceMode>())
             {
-                <MudSelectItem T="DeviceMode?" Value="@((DeviceMode?)s)">@LocalizeStatus(s)</MudSelectItem>
+                <MudSelectItem T="DeviceMode?" Value="@((DeviceMode?)s)">@LocalizeStatus(s,false)</MudSelectItem>
             }
         </MudSelect>
 
@@ -93,8 +95,8 @@
 
     <RowTemplate>
         <MudTd DataLabel="وضعیت">
-            <MudChip T="string" Variant="Variant.Filled" Color="@GetStatusColor(context.Status)">
-                @LocalizeStatus(context.Status)
+            <MudChip T="string" Variant="Variant.Filled" Color="@GetStatusColor(context.Status,context.IsInservice)">
+                @LocalizeStatus(context.Status,context.IsInservice)
             </MudChip>
         </MudTd>
         <MudTd DataLabel=" وضعیت ایجنت">
@@ -174,6 +176,20 @@
         <MudTablePager />
     </PagerContent>
 </MudTable>
+@if (_isLoadingScreenshot)
+{
+    <MudOverlay Visible="true" DarkBackground="true">
+        <MudPaper Class="pa-6">
+            <MudProgressCircular Indeterminate="true"
+                                 Color="Color.Primary"
+                                 Size="Size.Large" />
+
+            <MudText Class="mt-3">
+               لطفا منتظر بمانید..
+            </MudText>
+        </MudPaper>
+    </MudOverlay>
+}
 <script>
     window.downloadBytes = function (base64Data, contentType, fileName) {
       const byteChars = atob(base64Data);
@@ -204,6 +220,7 @@
     private Guid? _branchId;
     private HubConnection? _hubConnection;
     private CancellationTokenSource? _cancellationTokenSource=new();
+    public bool _isLoadingScreenshot { get; set; }
 
     // شعب از سرویس
     private IReadOnlyList<BranchesViewModel>? _branches;
@@ -296,44 +313,137 @@
         _                        => SortDirectionDto.None
     };
 
-    private Color GetStatusColor(DeviceMode s) => s switch
+    private Color GetStatusColor(DeviceMode s, bool isInservice)
     {
-        DeviceMode.InService => Color.Success,
-        DeviceMode.warning   => Color.Warning,
-        DeviceMode.Error     => Color.Error,
-        DeviceMode.Offline   => Color.Dark,
-        DeviceMode.Supervisor => Color.Secondary,
-        DeviceMode.Online => Color.Surface,
-        _ => Color.Default
-    };
+        switch(s)
+        {
+            case DeviceMode.InService:
+                {
+                    return Color.Success;
 
-    private string LocalizeStatus(DeviceMode s) => s switch
+                };
+            case DeviceMode.warning_paper:
+                {
+                    if(isInservice)
+                        return Color.Success;
+                    return Color.Warning;
+
+                }
+            case DeviceMode.warning_Money:
+                {
+                    if (isInservice)
+                        return Color.Success;
+                    return Color.Warning;
+
+                }
+            case DeviceMode.Error:
+                {
+                    if (isInservice)
+                        return Color.Success;
+                    return Color.Error;
+
+                }
+            case DeviceMode.Offline:
+                {
+                    return Color.Dark;
+
+                }
+            case DeviceMode.Supervisor:
+                {
+                    return Color.Secondary;
+
+                }
+            case DeviceMode.Online:
+                {
+                    return Color.Surface;
+
+                }
+            default:
+                return Color.Default;
+        };
+        return Color.Default;
+    }
+
+    private string LocalizeStatus(DeviceMode s, bool isInservice)
     {
-        DeviceMode.InService => "سرویس‌دهی",
-        DeviceMode.warning   => "هشدار",
-        DeviceMode.Error     => "خطا",
-        DeviceMode.Offline   => "آفلاین",
-        DeviceMode.Supervisor =>"خارج از سرویس",
-        DeviceMode.Online => "آنلاین",
-        _ => s.ToString()
-    };
+
+        switch (s)
+        {
+            case DeviceMode.InService:
+                {
+                    return "سرویس دهی";
+
+                }
+                ;
+            case DeviceMode.warning_paper:
+                {
+                    if (isInservice)
+                        return "سرویس دهی (کمبود کاغذ)";
+                    return ("کمبود کاغذ");
+
+                }
+            case DeviceMode.warning_Money:
+                {
+                    if (isInservice)
+                        return "سرویس دهی (کمبود موجودی)";
+                    return ("کمبود موجودی");
+
+                }
+            case DeviceMode.Error:
+                {
+                    if (isInservice)
+                        return "سرویس دهی (خطای ماژول)";
+                    return (" خطا");
+
+                }
+            case DeviceMode.Offline:
+                {
+                    return "آفلاین";
+
+                }
+            case DeviceMode.Supervisor:
+                {
+                    return "خارج از سرویس";
+
+                }
+            case DeviceMode.Online:
+                {
+                    return "آنلاین";
+
+                }
+            default:
+                return "نامشخص";
+        }
+        ;
+        return "نامشخص";
+    } 
 
     // ---- Actions (فعلاً Snackbar؛ بعداً به IDeviceControlService وصل می‌کنیم) ----
     private async Task UpdateStatuses(DeviceViewModel d)
     {
+        _logger.Info("Device status update requested. IP={IP}", d.Ip);
         var result = await DeviceService.GetForcesStatus(d.Ip, _cancellationTokenSource.Token);
         if (result)
-            Snackbar.Add($"بروزرسانی دستگاه {d.Ip} با موفقیت انجام شد", Severity.Success);
+        {
+            _logger.Info("Device status update SUCCESS. IP={IP}", d.Ip);
+            Snackbar.Add($"بروزرسانی دستگاه {d.Ip} با موفقیت انجام شد", Severity.Success);}
         else
+        {
+            _logger.Warn("Device status update FAILED (service returned false). IP={IP}", d.Ip);
             Snackbar.Add("دستگاه موفق به بروزرسانی وضعیت نشد.", Severity.Warning);
-     
+        }
+
     }
     private void Screenshot2(DeviceViewModel d)      => Snackbar.Add("اسکرین‌شات: " + d.DisplayName, Severity.Success);
     private async Task Screenshot(DeviceViewModel d)
     {
         try
         {
+            _logger.Info("Screenshot request started. IP={IP}, Device={Device}",
+        d.Ip, d.DisplayName);
+            _isLoadingScreenshot = true;
             var bytes = await DeviceService.RequestScreenshotAsync(d.Ip, CancellationToken.None);
+            _isLoadingScreenshot = false;
             if (bytes is null || bytes.Length == 0)
             {
                 Snackbar.Add("تصویری دریافت نشد.", Severity.Warning);
@@ -357,17 +467,27 @@
             };
 
             DialogService.Show<ScreenShotDialog>("اسکرین‌شات", parameters, options);
+            _logger.Info("Screenshot dialog opened. IP={IP}", d.Ip);
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
+            _logger.Error(ex,
+       "Screenshot TimeOut ERROR. IP={IP}, Device={Device}",
+       d.Ip, d.DisplayName);
             Snackbar.Add("⏳ پاسخ اسکرین‌شات به‌موقع نرسید.", Severity.Warning);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            _logger.Error(ex,
+      "Screenshot Cancelled ERROR. IP={IP}, Device={Device}",
+      d.Ip, d.DisplayName);
             Snackbar.Add("درخواست اسکرین‌شات لغو شد.", Severity.Normal);
         }
         catch (Exception ex)
         {
+            _logger.Error(ex,
+       "Screenshot Exeption ERROR. IP={IP}, Device={Device}",
+       d.Ip, d.DisplayName);
             Snackbar.Add("خطا در دریافت اسکرین‌شات: " + ex.Message, Severity.Error);
         }
     }
@@ -396,9 +516,15 @@
         {
             _isBusy = true;
             StateHasChanged();
+            _logger.Info("Journal download started. IP={IP}, Start={Start}, End={End}",
+       d.Ip, start, end);
+            _isLoadingScreenshot = true;
             var bytes = await DeviceService.RequestJournalAsync(d.Ip, start, end);
+            _isLoadingScreenshot = false;
             if (bytes == null || bytes.Length == 0)
             {
+                _logger.Warn("Journal empty result. IP={IP}, Start={Start}, End={End}",
+              d.Ip, start, end);
                 Snackbar.Add("ژورنالی در این بازه یافت نشد.", Severity.Warning);
                 return;
             }
@@ -409,29 +535,40 @@
 
             if (LooksLikeZip(bytes))
             {
+
                 var zipName = $"journal_{safeIp}_{startToken}-{endToken}.zip";
+                _logger.Info("Journal downloaded as ZIP. IP={IP}, File={FileName}, Size={Size}",
+       d.Ip, zipName, bytes.Length);
                 await SaveFileAsync(bytes, zipName, "application/zip");
             }
             else
             {
-                // احتمالاً ایجنت یک فایل متنی منفرد فرستاده
+
                 var txtName = $"journal_{safeIp}_{startToken}-{endToken}.txt";
+                _logger.Info("Journal returned as TXT . IP={IP}, File={FileName}",
+             d.Ip, txtName);
                 await SaveFileAsync(bytes, txtName, "text/plain");
                 Snackbar.Add("فایل دریافتی زیپ نبود؛ به‌صورت متن ذخیره شد.", Severity.Info);
             }
 
             Snackbar.Add("دانلود ژورنال آماده شد.", Severity.Success);
         }
-        catch (TimeoutException)
+        catch (TimeoutException ex)
         {
+            _isLoadingScreenshot = false ;
+            _logger.Error( ex,"Journal download TIMEOUT. IP={IP}", d.Ip);
             Snackbar.Add("⏳ دریافت ژورنال در زمان مقرر تکمیل نشد.", Severity.Warning);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            _isLoadingScreenshot = false;
+            _logger.Warn("Journal download CANCELED. IP={IP}", d.Ip);
             Snackbar.Add("عملیات لغو شد.", Severity.Info);
         }
         catch (Exception ex)
         {
+            _isLoadingScreenshot = false;
+            _logger.Error(ex, "Journal download ERROR. IP={IP}", d.Ip);
             Snackbar.Add("خطا در دریافت ژورنال: " + ex.Message, Severity.Error);
         }
         finally
@@ -454,20 +591,36 @@
         {
             _isBusy = true;
             StateHasChanged();
-
+            _logger.Warn("DEVICE REBOOT REQUESTED. Device={Device}, IP={IP}",
+           d.DisplayName, d.Ip);
+            _isLoadingScreenshot = true;
             var ok = await DeviceService.RestartOrShutdownDevice(true, d.Ip);
-            if (ok)
+            _isLoadingScreenshot = false;
+            if (ok){
+                _logger.Info("DEVICE REBOOT SUCCESS. Device={Device}, IP={IP}",
+              d.DisplayName, d.Ip);
                 Snackbar.Add("دستگاه با موفقیت برای ریست زمان‌بندی شد (ممکن است ۵–۱۵ ثانیه طول بکشد).", Severity.Success);
+            }
             else
-                Snackbar.Add("تأیید از ایجنت در بازهٔ تعیین‌شده دریافت نشد.", Severity.Warning);
+            {
+                _logger.Warn("DEVICE REBOOT FAILED (no ack from agent). Device={Device}, IP={IP}",
+               d.DisplayName, d.Ip);
+                Snackbar.Add("تأیید از ایجنت در بازهٔ تعیین‌شده دریافت نشد.",
+               Severity.Warning);
+
+            }
         }
         catch (OperationCanceledException)
         {
+            _isLoadingScreenshot = false;
             Snackbar.Add("عملیات لغو شد.", Severity.Info);
         }
         catch (Exception ex)
         {
-
+            _isLoadingScreenshot = false;
+            _logger.Error(ex,
+          "DEVICE REBOOT ERROR. Device={Device}, IP={IP}",
+          d.DisplayName, d.Ip);
             Snackbar.Add("خطا در ارسال دستور ریست.", Severity.Error);
         }
         finally
@@ -490,19 +643,39 @@
         {
             _isBusy = true;
             StateHasChanged();
+            _logger.Warn(
+     "DEVICE SHUTDOWN REQUESTED. Device={Device}, IP={IP}",
+     d.DisplayName, d.Ip);
+            _isLoadingScreenshot = true;
             var ok = await DeviceService.RestartOrShutdownDevice(false, d.Ip);
+            _isLoadingScreenshot = false;
             if (ok)
+            {
+                _logger.Info(
+                    "DEVICE SHUTDOWN SUCCESS. Device={Device}, IP={IP}",
+                    d.DisplayName, d.Ip);
+
                 Snackbar.Add("دستور خاموشی پذیرفته شد.", Severity.Success);
+            }
             else
-                Snackbar.Add("تأیید از ایجنت در بازهٔ تعیین‌شده دریافت نشد.", Severity.Warning);
+            {
+                _logger.Warn(
+                    "DEVICE SHUTDOWN FAILED (no ack from agent). Device={Device}, IP={IP}",
+                    d.DisplayName, d.Ip);
+
+                Snackbar.Add(
+                    "تأیید از ایجنت در بازهٔ تعیین‌شده دریافت نشد.",
+                    Severity.Warning);
+            }
         }
         catch (OperationCanceledException)
         {
+            _isLoadingScreenshot = false;
             Snackbar.Add("عملیات لغو شد.", Severity.Info);
         }
         catch (Exception ex)
         {
-
+            _isLoadingScreenshot = false;
             Snackbar.Add("خطا در ارسال دستور خاموشی.", Severity.Error);
         }
         finally
@@ -540,10 +713,17 @@
             {
                 contentType = "application/octet-stream";
             }
-
+            _isLoadingScreenshot = true;
             var result = await DeviceService.RequestUploadFileAsync(Ip, file);
+            _isLoadingScreenshot = false;
             if (result)
             {
+                _logger.Info(
+             "FILE UPLOAD SUCCESS. IP={IP}, FileName={FileName}, Size={Size}",
+             Ip,
+             file.Name,
+             file.Size);
+
                 Snackbar.Add("آپلود فایل با موفقیت انجام شد!", Severity.Success);
 
             }
@@ -552,7 +732,7 @@
         {
 
         }
-        catch (Exception)
+        catch (Exception ex)
         {
 
             Snackbar.Add("آپلود فایل با خطا مواجه شد لطفا مجدد تلاش فرمایید!", Severity.Error);

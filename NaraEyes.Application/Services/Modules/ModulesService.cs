@@ -495,7 +495,17 @@ result.AntiFraudModule=CameraHelper.MapAntiFraudModuleStatus(dto.AntiFraudModule
 
         public async Task<bool> IsDeviceInservice(string ip, CancellationToken cancellationToken = default)
         {
+            try
+            {
+
+     
             return await _uow.Devices.AnyAsync(x => x.Ip == ip && x.Mode == DeviceMode.InService);
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
         }
     }
 

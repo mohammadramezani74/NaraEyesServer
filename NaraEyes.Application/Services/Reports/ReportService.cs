@@ -37,6 +37,10 @@ namespace NaraEyes.Application.Services.Reports
 
 
             var total = await usersQuery.CountAsync(cancellationToken);
+            try
+            {
+
+         
             var list = entities.Select(x => new UserActivityReport
             {
                 FirstName = x.FirstName,
@@ -52,7 +56,12 @@ namespace NaraEyes.Application.Services.Reports
                 Items = list,
                 Total = total
             };
+            }
+            catch (Exception ex)
+            {
 
+                throw;
+            }
 
         }
 

@@ -1,6 +1,7 @@
 ﻿@page "/devices/{ip}"
 @using Microsoft.AspNetCore.Authorization
 @using MudBlazor
+@using NaraEyes.Application.Abstraction.Logger
 @using NaraEyes.Application.Contracts.Interfaces.Devices
 @using NaraEyes.Application.Contracts.Interfaces.Modules
 @using NaraEyes.Application.Contracts.Models.Metrics
@@ -14,6 +15,7 @@
 @inject IDeviceService service
 @inject IModuleServices _moduleServices
 @inject IDialogService Dialog
+@inject IAppLogger _logger;
 @attribute [Authorize(Roles = "مدیریت مانیتورینگ,مدیریت مرکزی")]
 
 <PageTitle>Device Detail</PageTitle>
@@ -348,16 +350,35 @@
 
          await   Task.Delay(3000);
             if (m.Name == Dispenser)
+            {
+                _logger.Info("CDM reset started. ModuleId={ModuleId}", m.ModuleId);
                 ok = await service.RequestResetCdmAsync(ip);
+            }
             else if (m.Name == IDC)
+            {
+                _logger.Info("IDC reset started. ModuleId={ModuleId}", m.ModuleId);
                 ok = await service.RequestResetIdcAsync(ip);
+            }
             else if (m.Name == Ptr)
+            {
+                _logger.Info("PTR reset started. ModuleId={ModuleId}", m.ModuleId);
                 ok = await service.RequestResetPtrAsync(ip);
+            }
 
             if (ok)
+            {
+                _logger.Info("Module reset SUCCESS. Module={ModuleName}, ModuleId={ModuleId}",
+                    m.Name, m.ModuleId);
+
                 Snackbar.Add($"{m.Name} ریست شد.", Severity.Success);
+            }
             else
+            {
+                _logger.Warn("Module reset FAILED. Module={ModuleName}, ModuleId={ModuleId}",
+                    m.Name, m.ModuleId);
+
                 Snackbar.Add($"{m.Name} ریست نشد.", Severity.Error);
+            }
         }
         catch (Exception ex)
         {

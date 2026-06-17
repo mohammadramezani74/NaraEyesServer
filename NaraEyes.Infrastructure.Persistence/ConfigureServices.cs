@@ -28,9 +28,9 @@ namespace NaraEyes.Infrastructure.Persistence
                        .CacheAllQueries(CacheExpirationMode.Sliding, TimeSpan.FromMinutes(15))
                        .ConfigureLogging(true);
             });
-            services.AddScoped<CustomSecondLevelCacheInterceptor>();
-            services.AddScoped<AuditInterceptor>();
-            services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =>
+            services.AddSingleton<CustomSecondLevelCacheInterceptor>();
+            services.AddSingleton<AuditInterceptor>();
+            services.AddDbContextFactory<ApplicationDbContext>((serviceProvider, options) =>
             {
                 var Audiinterceptor = serviceProvider.GetRequiredService<AuditInterceptor>();
                 var secondLevelCache = serviceProvider.GetRequiredService<CustomSecondLevelCacheInterceptor>();
