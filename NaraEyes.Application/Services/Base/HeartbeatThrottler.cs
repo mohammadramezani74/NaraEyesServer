@@ -28,7 +28,7 @@ namespace NaraEyes.Application.Services.Base
             var last = _last.GetOrAdd(deviceIp, _ => DateTime.MinValue);
             if (now - last < _minInterval) return;
 
-            // تضمین اینکه فقط یک نویسنده Heartbeat اجرا شود
+         
             if (!_last.TryUpdate(deviceIp, now, last)) return;
 
             try

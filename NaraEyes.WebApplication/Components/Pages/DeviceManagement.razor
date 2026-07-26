@@ -179,14 +179,23 @@
 @if (_isLoadingScreenshot)
 {
     <MudOverlay Visible="true" DarkBackground="true">
-        <MudPaper Class="pa-6">
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Style="position: relative; min-width: 250px;">
+            
+            @* دکمه بستن در بالای کارت *@
+            <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                           Color="Color.Error" 
+                           OnClick="CancelLoading" 
+                           Style="position: absolute; top: 8px; right: 8px;" />
+
             <MudProgressCircular Indeterminate="true"
                                  Color="Color.Primary"
-                                 Size="Size.Large" />
+                                 Size="Size.Large"
+                                 Class="mt-4" />
 
-            <MudText Class="mt-3">
-               لطفا منتظر بمانید..
+            <MudText Class="mt-4" Typo="Typo.body1">
+                لطفا منتظر بمانید...
             </MudText>
+            
         </MudPaper>
     </MudOverlay>
 }
@@ -221,7 +230,16 @@
     private HubConnection? _hubConnection;
     private CancellationTokenSource? _cancellationTokenSource=new();
     public bool _isLoadingScreenshot { get; set; }
+    private PeriodicTimer? _timer;
+    private void CancelLoading()
+    {
+        _isLoadingScreenshot = false;
 
+        // اگر از CancellationTokenSource استفاده می‌کنی:
+        // _cts?.Cancel();
+
+        StateHasChanged();
+    }
     // شعب از سرویس
     private IReadOnlyList<BranchesViewModel>? _branches;
     private async Task SaveFileAsync(byte[] data, string fileName, string contentType)
@@ -241,23 +259,37 @@
         {
             DeviceService.CheckHeartBeat(_cancellationTokenSource.Token);
 
+            _timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
 
-            _hubConnection = new HubConnectionBuilder()
-              .WithUrl(Nav.ToAbsoluteUri("/deviceHub"))
-              .Build();
-            _hubConnection.On<string, DeviceMode>("ReceiveDeviceStatusUpdate", (ip, mode) =>
+            _ = Task.Run(async () =>
             {
-                if (_disposed) return;
-
-                _ = InvokeAsync(async () =>
+                while (await _timer.WaitForNextTickAsync(_cancellationTokenSource.Token))
                 {
-                    if (_disposed) return;
+                    if (_disposed)
+                        break;
 
-                    await table.ReloadServerData();
-                });
+                    await InvokeAsync(async () =>
+                    {
+                        await table.ReloadServerData();
+                    });
+                }
             });
+            // _hubConnection = new HubConnectionBuilder()
+            //   .WithUrl(Nav.ToAbsoluteUri("/deviceHub"))
+            //   .Build();
+            // _hubConnection.On<string, DeviceMode>("ReceiveDeviceStatusUpdate", (ip, mode) =>
+            // {
+            //     if (_disposed) return;
 
-            await _hubConnection.StartAsync();
+            //     _ = InvokeAsync(async () =>
+            //     {
+            //         if (_disposed) return;
+
+            //         await table.ReloadServerData();
+            //     });
+            // });
+
+            // await _hubConnection.StartAsync();
 
         }
         catch (Exception ex)
@@ -422,7 +454,9 @@
     private async Task UpdateStatuses(DeviceViewModel d)
     {
         _logger.Info("Device status update requested. IP={IP}", d.Ip);
+        _isLoadingScreenshot = true;
         var result = await DeviceService.GetForcesStatus(d.Ip, _cancellationTokenSource.Token);
+        _isLoadingScreenshot = false;
         if (result)
         {
             _logger.Info("Device status update SUCCESS. IP={IP}", d.Ip);
@@ -706,7 +740,7 @@
                 return;
             }
             StateHasChanged();
-            _cancellationTokenSource = new CancellationTokenSource();
+
             var extension = Path.GetExtension(file.Name);
             var contentType = file.ContentType;
             if (string.IsNullOrEmpty(contentType))
@@ -768,8 +802,13 @@
         {
             _cancellationTokenSource?.Cancel();
             _cancellationTokenSource?.Dispose();
+        
         }
         catch { }
+        if (_timer is not null)
+        {
+            _timer.Dispose();
+        }
 
         if (_hubConnection is not null)
         {

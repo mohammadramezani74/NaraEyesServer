@@ -197,8 +197,9 @@ namespace NaraEyes.Application.Services.Devices
             }
             var userid = await GetUserId();
             entity.ModifiedById = userid;
+            var branchId = model.BranchId == Guid.Empty ? null : model.BranchId;
             entity.ApplyUpdate(model.Code, model.Ip, model.Model, model.InstallationDate,
-                model.Address, model.SerialNo, model.Tel, model.MobileNo, model.BranchId,
+                model.Address, model.SerialNo, model.Tel, model.MobileNo, branchId,
                 model.Description, model.Latitude, model.Longitude, model.IsActive, null, null);
             entity.Operator = contact;
             if(contact!=null)
@@ -218,7 +219,11 @@ namespace NaraEyes.Application.Services.Devices
         public async Task<OperationResult> CreateDevice(CreateDeviceViewModel model, CancellationToken cancellationToken = default)
         {
             var op = new OperationResult();
-        
+            var deviceCount = await _uow.Devices.AsNoTracking().CountAsync(cancellationToken);
+            if (deviceCount >= 15)
+            {
+                return op.Failed("امکان اضافه کردن دستگاه بیشتر از 15 عدد وجود ندارد");
+            }
             Device? entity = Device.RegisterNewDev(model.Code, model.Ip, model.Model, model.SerialNo, model.Address, model.Longitude,
                 model.Latitude,model.Description,model.BranchId.Value,model.MobileNo);
 
@@ -240,7 +245,11 @@ namespace NaraEyes.Application.Services.Devices
 
         public async Task<Guid> RegisterAsync(RegisterDeviceCommand context, CancellationToken ct)
         {
-
+            var deviceCount =await _uow.Devices.AsNoTracking().CountAsync(ct);
+            if (deviceCount >= 15)
+            {
+                return Guid.Empty ;
+            }
             var existing = await _uow.Devices.FirstOrDefaultAsync(d => d.Ip == context.ip, ct);
             if (existing != null)
             {
@@ -548,12 +557,12 @@ usage=x.CurrentMetrics.CpuUsage??0,
                     }
             return new HomeChartsViewModel
             {
-                InServiceCount = devices.Where(x => x.InService).Count(),
+                InServiceCount = devices.Where(x => x.Mode==DeviceMode.InService).Count(),
                 errorCount = devices.Where(x => x.Mode == DeviceMode.Error).Count(),
                 warningCount = devices.Where(x => x.Mode is DeviceMode.warning or DeviceMode.warning_Money or DeviceMode.warning_paper).Count(),
                 offlineCount = devices.Where(x => x.Mode == DeviceMode.Offline).Count(),
                 OnlineCount= devices.Where(x => x.Mode == DeviceMode.Online).Count(),
-                OutOfService= devices.Where(x => !x.InService).Count() ,
+                OutOfService= devices.Where(x => x.Mode != DeviceMode.InService).Count() ,
                 TotalDevice =devices.Count(),
                 BranchCount= branchcount,
                 Supervisions= supervision,
@@ -940,7 +949,11 @@ WHERE d.Ip = @Ip";
         {
             if (file is null)
                 return false;
-
+            var deviceCount = await _uow.Devices.AsNoTracking().CountAsync(cancellationToken);
+            if (deviceCount >= 15)
+            {
+                return  false;
+            }
             await using var stream = file.OpenReadStream(5 * 1024 * 1024, cancellationToken);
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms, cancellationToken);

@@ -48,12 +48,7 @@
 
             <div class="mb-2">
                 <label for="password" class="form-label">رمز عبور</label>
-                <InputText id="password"
-                           name="loginModel.Password"
-                           type="password"
-                           @bind-Value="loginModel.Password"
-                           class="form-control"
-                           placeholder="رمز عبور را وارد کنید" />
+                <InteractivePassword @bind-Value="loginModel.Password" />
                 <ValidationMessage For="@(() => loginModel.Password)" class="text-danger" />
             </div>
 

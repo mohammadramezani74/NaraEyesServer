@@ -254,7 +254,7 @@
 
         try
         {
-            Model.BranchId = _selectedBranch.Id;
+            Model.BranchId = _selectedBranch != null ? _selectedBranch.Id : Guid.Empty;
             // ساخت newcontact فقط در صورتی که کاربر چیزی وارد کرده باشد
             if (!string.IsNullOrWhiteSpace(_ncName) ||
                 !string.IsNullOrWhiteSpace(_ncEmail) ||

@@ -123,6 +123,10 @@ public class WebSocketPollHandler
 
         while (true)
         {
+            try
+            {
+
+         
             var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
 
             if (result.MessageType == WebSocketMessageType.Close)
@@ -135,6 +139,12 @@ public class WebSocketPollHandler
 
             if (result.EndOfMessage)
                 break;
+            }
+            catch (Exception)
+            {
+
+               
+            }
         }
 
         return sb.ToString();

@@ -147,7 +147,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unitstatus = CashUnitStatus.Empty;
                             }
-                            if (cu.UnitId == "LCU00")
+                            if (cu.UnitId == "LCU00"|| cu.UnitId == "1234")
                             {
                                 type = CashUnitType.Reject;
                                 unitstatus = CashUnitStatus.Ok;

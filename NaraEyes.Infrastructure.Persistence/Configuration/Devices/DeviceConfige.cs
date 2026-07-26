@@ -27,6 +27,10 @@ namespace NaraEyes.Infrastructure.Persistence.Configuration.Devices
                    .HasDatabaseName("IX_Device_SerialNo")
                    .IsUnique()
                    .HasFilter("[SerialNo] IS NOT NULL");
+            builder.HasIndex(x => x.Ip)
+       .HasDatabaseName("IX_Device_Ip")
+       .IsUnique() 
+       .HasFilter("[Ip] IS NOT NULL"); 
 
             builder.Property(x => x.Ip)
                    .HasMaxLength(45)
