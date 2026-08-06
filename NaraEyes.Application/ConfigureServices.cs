@@ -40,6 +40,7 @@ namespace NaraEyes.Application
             services.AddScoped<IReportService, ReportService>();
             services.AddHostedService(sp => (InBoxBatchWriter)sp.GetRequiredService<IInBoxBatchWriter>());
             services.AddSingleton<ICommandDispatchState, CommandDispatchState>();
+            services.AddHostedService<HeartbeatMonitor>();
 
             return services;
         }

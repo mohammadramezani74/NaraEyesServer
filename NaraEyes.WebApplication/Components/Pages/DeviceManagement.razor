@@ -231,6 +231,7 @@
     private CancellationTokenSource? _cancellationTokenSource=new();
     public bool _isLoadingScreenshot { get; set; }
     private PeriodicTimer? _timer;
+    private Task? _refreshLoop;
     private void CancelLoading()
     {
         _isLoadingScreenshot = false;
@@ -252,74 +253,75 @@
 
     protected override async Task OnInitializedAsync()
     {
-
-        _branches = await BranchService.GetAllBranches(_cancellationTokenSource.Token);
-        await Task.Delay(500);
         try
         {
-            DeviceService.CheckHeartBeat(_cancellationTokenSource.Token);
-
-            _timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
-
-            _ = Task.Run(async () =>
-            {
-                while (await _timer.WaitForNextTickAsync(_cancellationTokenSource.Token))
-                {
-                    if (_disposed)
-                        break;
-
-                    await InvokeAsync(async () =>
-                    {
-                        await table.ReloadServerData();
-                    });
-                }
-            });
-            // _hubConnection = new HubConnectionBuilder()
-            //   .WithUrl(Nav.ToAbsoluteUri("/deviceHub"))
-            //   .Build();
-            // _hubConnection.On<string, DeviceMode>("ReceiveDeviceStatusUpdate", (ip, mode) =>
-            // {
-            //     if (_disposed) return;
-
-            //     _ = InvokeAsync(async () =>
-            //     {
-            //         if (_disposed) return;
-
-            //         await table.ReloadServerData();
-            //     });
-            // });
-
-            // await _hubConnection.StartAsync();
-
+            _branches = await BranchService.GetAllBranches(_cancellationTokenSource!.Token);
         }
         catch (Exception ex)
         {
-
-            throw;
+            _logger.Error(ex, "Loading branches failed");
+            _branches = Array.Empty<BranchesViewModel>();
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // تایمر بعد از اولین رندر شروع می‌شود تا table حتماً مقدار داشته باشد
+        _timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
+
+        _refreshLoop = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timer.WaitForNextTickAsync(_cancellationTokenSource!.Token))
+                {
+                    if (_disposed) break;
+
+                    // اگر کاربر در حال انجام کاری است، این دور را رد کن
+                    if (_isLoadingScreenshot) continue;
+
+                    await InvokeAsync(async () =>
+                    {
+                        if (_disposed || table is null) return;
+                        try { await table.ReloadServerData(); }
+                        catch (Exception ex) { _logger.Warn("Auto-refresh failed"); }
+                    });
+                }
+            }
+            catch (OperationCanceledException) { /* عادی */ }
+            catch (Exception ex) { _logger.Error(ex, "Refresh loop crashed"); }
+        });
+    }
+    private readonly SemaphoreSlim _reloadGate = new(1, 1);
     // ---- Server reload (paging + sorting + filtering) ----
     private async Task<TableData<DeviceViewModel>> ServerReload(TableState state, CancellationToken token)
     {
-        var filter = new DeviceFilterViewModel
+        await _reloadGate.WaitAsync(token);
+        try
         {
-            Search        = _search,
-            Status        = _status,
-            Branch        = _branchId,
-            Page          = state.Page + 1,              // TableState.Page صفر مبناست
-            PageSize      = state.PageSize,
-            SortLabel     = state.SortLabel,
-            SortDirection = MapSortDirection(state.SortDirection)
-        };
+            var filter = new DeviceFilterViewModel
+            {
+                Search = _search,
+                Status = _status,
+                Branch = _branchId,
+                Page = state.Page + 1,              // TableState.Page صفر مبناست
+                PageSize = state.PageSize,
+                SortLabel = state.SortLabel,
+                SortDirection = MapSortDirection(state.SortDirection)
+            };
 
-        var result = await DeviceService.GetAllDevicesAsync(filter, token);
+            var result = await DeviceService.GetAllDevicesAsync(filter, token);
 
-        return new TableData<DeviceViewModel>
-        {
-            TotalItems = result.Total,
-            Items      = result.Items
-        };
+            return new TableData<DeviceViewModel>
+            {
+                TotalItems = result.Total,
+                Items = result.Items
+            };
+        }
+        finally { _reloadGate.Release(); }
+
     }
 
     // ---- Filters handlers ----
@@ -471,13 +473,16 @@
     private void Screenshot2(DeviceViewModel d)      => Snackbar.Add("اسکرین‌شات: " + d.DisplayName, Severity.Success);
     private async Task Screenshot(DeviceViewModel d)
     {
+        _logger.Info("Screenshot request started. IP={IP}, Device={Device}", d.Ip, d.DisplayName);
+
+        _isLoadingScreenshot = true;
+        StateHasChanged();
+
         try
         {
-            _logger.Info("Screenshot request started. IP={IP}, Device={Device}",
-        d.Ip, d.DisplayName);
-            _isLoadingScreenshot = true;
-            var bytes = await DeviceService.RequestScreenshotAsync(d.Ip, CancellationToken.None);
-            _isLoadingScreenshot = false;
+            var bytes = await DeviceService.RequestScreenshotAsync(
+                d.Ip, _cancellationTokenSource.Token);
+
             if (bytes is null || bytes.Length == 0)
             {
                 Snackbar.Add("تصویری دریافت نشد.", Severity.Warning);
@@ -505,24 +510,24 @@
         }
         catch (TimeoutException ex)
         {
-            _logger.Error(ex,
-       "Screenshot TimeOut ERROR. IP={IP}, Device={Device}",
-       d.Ip, d.DisplayName);
-            Snackbar.Add("⏳ پاسخ اسکرین‌شات به‌موقع نرسید.", Severity.Warning);
+            _logger.Error(ex, "Screenshot TimeOut. IP={IP}", d.Ip);
+            Snackbar.Add("⏳ دستگاه پاسخ نداد. ممکن است آفلاین باشد یا ایجنت اجرا نشده باشد.",
+                         Severity.Warning);
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException)
         {
-            _logger.Error(ex,
-      "Screenshot Cancelled ERROR. IP={IP}, Device={Device}",
-      d.Ip, d.DisplayName);
             Snackbar.Add("درخواست اسکرین‌شات لغو شد.", Severity.Normal);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex,
-       "Screenshot Exeption ERROR. IP={IP}, Device={Device}",
-       d.Ip, d.DisplayName);
+            _logger.Error(ex, "Screenshot Exception. IP={IP}", d.Ip);
             Snackbar.Add("خطا در دریافت اسکرین‌شات: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            // 🔑 تحت هر شرایطی — این همان چیزی است که کم بود
+            _isLoadingScreenshot = false;
+            await InvokeAsync(StateHasChanged);
         }
     }
     private bool _isBusy;
@@ -802,6 +807,7 @@
         {
             _cancellationTokenSource?.Cancel();
             _cancellationTokenSource?.Dispose();
+            _reloadGate.Dispose();
         
         }
         catch { }
@@ -809,7 +815,11 @@
         {
             _timer.Dispose();
         }
-
+        if (_refreshLoop is not null)
+        {
+            try { await _refreshLoop.WaitAsync(TimeSpan.FromSeconds(3)); }
+            catch { }
+        }
         if (_hubConnection is not null)
         {
             try

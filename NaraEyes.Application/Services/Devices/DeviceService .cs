@@ -473,7 +473,7 @@ namespace NaraEyes.Application.Services.Devices
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
             _dispatchState.MarkCommandEnqueued(deviceIp);
-            var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(60), ct);
+            var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(25), ct);
             return bytes;
         }
         public async Task<bool> RequestResetCdmAsync(string deviceIp, CancellationToken ct = default)
