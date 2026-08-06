@@ -40,6 +40,13 @@ builder.Services.AddRazorComponents()
 builder.Services.AddMudServices();
 builder.Services.AddSignalR();
 builder.Services.AddCascadingAuthenticationState();
+builder.WebHost.ConfigureKestrel(o =>
+{
+    o.Limits.MaxConcurrentConnections = 2000;
+    o.Limits.MaxRequestBodySize = 64 * 1024 * 1024;   // ژورنال/اسکرین‌شات base64
+    o.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(2);
+    o.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(30);
+});
 var columnOptions = new ColumnOptions();
 
 // ستون‌های پیش‌فرض مهم
@@ -171,10 +178,11 @@ app.MapGet("/api/poll", async (
 app.UseWebSockets();
 app.Map("/api/ws", async context =>
 {
-    var handler = context.RequestServices.GetRequiredService<WebSocketPollHandler>();
+    var handler = ActivatorUtilities.CreateInstance<WebSocketPollHandler>(
+        context.RequestServices,
+        context.RequestServices.GetRequiredService<IServiceScopeFactory>());
     await handler.HandleAsync(context);
 });
-
 
 app.MapPost("/api/poll", async (
     string ip,

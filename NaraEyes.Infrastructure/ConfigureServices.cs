@@ -32,7 +32,7 @@ namespace NaraEyes.Infrastructure
             services.AddScoped<IInboxService, InBoxDeviceService>();
             services.AddSingleton<ICommandAwaiter, CommandAwaiter>();
             services.AddSingleton<IAckAwaiter, AckAwaiter>();
-            services.AddScoped<WebSocketPollHandler>();
+            //services.AddScoped<WebSocketPollHandler>();
             services.AddSingleton<IDbConnectionFactory>(_ =>
 new DbConnectionFactory(configuration["ConnectionStrings:ApplicationDbContext"]));
 

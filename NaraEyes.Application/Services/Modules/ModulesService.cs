@@ -179,8 +179,11 @@ namespace NaraEyes.Application.Services.Modules
                 // اگر TotalCount رشته‌ای است، با TryParse امن بخوان
                 int total = 0;
                 _ = int.TryParse(cash.TotalCount, NumberStyles.Integer, CultureInfo.InvariantCulture, out total);
-
-                result.Add(new Cassette(
+                    int current = 0;
+                    _ = int.TryParse(cash.CurrentCount, NumberStyles.Integer,
+                                     CultureInfo.InvariantCulture, out current);
+                    int amount = (int)current * cash.Denomination / 10;
+                    result.Add(new Cassette(
                     cash.Name,
                     cash.Denomination,
                     total,
@@ -188,7 +191,7 @@ namespace NaraEyes.Application.Services.Modules
                     cash.CurrentCountValue,
                     type:cash.Name=="LCU00"?"ریجکت":"پرداختی",
                    cash.Currency,
-                   ((int.Parse(cash.CurrentCount)* cash.Denomination)/10).ToMoney() +" تومان"
+                    amount.ToMoney() + " تومان"
                 ));
             }
 

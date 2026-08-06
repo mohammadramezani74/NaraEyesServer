@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
 using NaraEyes.Application.Contracts.Models.Devices;
@@ -10,14 +11,14 @@ using System.Text.Json;
 
 public class WebSocketPollHandler
 {
-    private readonly IDevicePollingService _deviceChannel; // جایی که PollAsync داخلشه
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<WebSocketPollHandler> _logger;
 
-    public WebSocketPollHandler(IDevicePollingService deviceChannel,
-                                ILogger<WebSocketPollHandler> logger)
+    public WebSocketPollHandler(ILogger<WebSocketPollHandler> logger,
+                                IServiceScopeFactory scopeFactory)
     {
-        _deviceChannel = deviceChannel;
         _logger = logger;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task HandleAsync(HttpContext context)
@@ -76,14 +77,17 @@ public class WebSocketPollHandler
                 }
 
                 // ========== صدا زدن همان PollAsync ==========
+         
                 PollResponse resp;
                 try
                 {
-                    resp = await _deviceChannel.PollAsync(deviceIp, reports, ct);
+                    // 🔑 هر دور Poll → scope تازه → DbContext کوتاه‌عمر
+                    using var scope = _scopeFactory.CreateScope();
+                    var polling = scope.ServiceProvider.GetRequiredService<IDevicePollingService>();
+                    resp = await polling.PollAsync(deviceIp, reports, ct);
                 }
                 catch (OperationCanceledException)
                 {
-                    // connection aborted
                     break;
                 }
                 catch (Exception ex)
@@ -123,28 +127,36 @@ public class WebSocketPollHandler
 
         while (true)
         {
+            WebSocketReceiveResult result;
+
             try
             {
-
-         
-            var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
-
-            if (result.MessageType == WebSocketMessageType.Close)
-            {
-                return null;
+                result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
             }
-
-            var chunk = Encoding.UTF8.GetString(buffer, 0, result.Count);
-            sb.Append(chunk);
-
-            if (result.EndOfMessage)
-                break;
+            catch (OperationCanceledException)
+            {
+                return null;          // اتصال لغو شد — تمام
+            }
+            catch (WebSocketException)
+            {
+                return null;          // سوکت شکست — تمام، نه تلاش دوباره
             }
             catch (Exception)
             {
-
-               
+                return null;          // هر چیز دیگر — باز هم خروج، نه حلقه
             }
+
+            if (result.MessageType == WebSocketMessageType.Close)
+                return null;
+
+            sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+
+            if (result.EndOfMessage)
+                break;
+
+            // محافظت در برابر پیام بی‌انتها
+            if (sb.Length > 32 * 1024 * 1024)
+                return null;
         }
 
         return sb.ToString();

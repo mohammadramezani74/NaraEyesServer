@@ -71,7 +71,7 @@ namespace NaraEyes.Application.Services.Devices
             var cmds = TryDequeueHot(deviceIp); // داخلش خودش key می‌کنه
             if (cmds?.Count > 0)
                 return new PollResponse { ServerTime = DateTime.UtcNow, Commands = cmds };
-            var now = DateTime.Now;
+            var now = DateTime.UtcNow;
             // ================== COLD PATH 1: فقط اگر لازم است، DB ==================
             List<OutBoxDeviceMessage> pending = new();
 

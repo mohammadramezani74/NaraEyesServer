@@ -12,24 +12,31 @@ namespace NaraEyes.Infrastructure.QueueImplemention
     {
         private readonly ConcurrentDictionary<Guid, TaskCompletionSource<byte[]>> _waits = new();
 
-        public Task<byte[]> WaitForBytesAsync(Guid commandId, TimeSpan timeout, CancellationToken ct)
+        public async Task<byte[]> WaitForBytesAsync(Guid commandId, TimeSpan timeout, CancellationToken ct)
         {
             var tcs = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
             _waits[commandId] = tcs;
 
-            _ = Task.Delay(timeout, ct).ContinueWith(_ =>
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(timeout);
+
+            using var reg = timeoutCts.Token.Register(() =>
             {
                 if (_waits.TryRemove(commandId, out var x))
-                    x.TrySetException(new TimeoutException("Screenshot timed out"));
+                {
+                    if (ct.IsCancellationRequested) x.TrySetCanceled(ct);
+                    else x.TrySetException(new TimeoutException("Command timed out"));
+                }
             });
 
-            ct.Register(() =>
+            try
             {
-                if (_waits.TryRemove(commandId, out var x))
-                    x.TrySetCanceled(ct);
-            });
-
-            return tcs.Task;
+                return await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                _waits.TryRemove(commandId, out _);   // تضمین پاکسازی
+            }
         }
 
         public bool TrySetResult(Guid commandId, byte[] data)

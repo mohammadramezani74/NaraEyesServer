@@ -147,7 +147,7 @@ namespace NaraEyes.Application.Services.Metrics
                             {
                                 unitstatus = CashUnitStatus.Empty;
                             }
-                            if (cu.UnitId == "LCU00"|| cu.UnitId == "1234")
+                            if (cu.UnitId == "LCU00"|| cu.UnitId == "12345")
                             {
                                 type = CashUnitType.Reject;
                                 unitstatus = CashUnitStatus.Ok;
@@ -164,65 +164,32 @@ namespace NaraEyes.Application.Services.Metrics
                     var cashunits = atm.CashUnits;
                     foreach (var cu in command.Cashunit)
                     {
-                        if (cu.UnitId == "LCU00")
+                        if (string.IsNullOrWhiteSpace(cu.UnitId)) continue;
+
+                        var existing = cashunits.FirstOrDefault(x =>
+                            string.Equals(x.Name, cu.UnitId, StringComparison.OrdinalIgnoreCase));
+
+                        if (existing != null)
                         {
-                            var unit0 = cashunits.Where(x => x.Name == "LCU00").FirstOrDefault();
-                            if (unit0 != null)
-                            {
-                                unit0.TotalCount = cu.Init.ToString();
-                                unit0.CurrentCount = cu.Count.ToString();
-                                unit0.Denomination = cu.Denomination;
-
-                            }
-
+                            existing.TotalCount = cu.Init.ToString();
+                            existing.CurrentCount = cu.Count.ToString();
+                            existing.Denomination = cu.Denomination;
                         }
-                        if (cu.UnitId == "LCU01")
+                        else
                         {
-                            var unit0 = cashunits.Where(x => x.Name == "LCU01").FirstOrDefault();
-                            if (unit0 != null)
-                            {
-                                unit0.TotalCount = cu.Init.ToString();
-                                unit0.CurrentCount = cu.Count.ToString();
-                                unit0.Denomination = cu.Denomination;
+                            // کاست جدیدی که قبلاً ندیده‌ایم — به‌جای نادیده گرفتن، اضافه کن
+                            var st = cu.Count == 0 ? CashUnitStatus.Empty
+                                   : cu.Count < 500 ? CashUnitStatus.Low
+                                   : CashUnitStatus.Full;
 
-                            }
+                            var type = (cu.UnitId == "LCU00" || cu.UnitId == "12345")
+                                     ? CashUnitType.Reject : CashUnitType.Bill;
 
-                        }
-                        if (cu.UnitId == "LCU02")
-                        {
-                            var unit0 = cashunits.Where(x => x.Name == "LCU02").FirstOrDefault();
-                            if (unit0 != null)
-                            {
-                                unit0.TotalCount = cu.Init.ToString();
-                                unit0.CurrentCount = cu.Count.ToString();
-                                unit0.Denomination = cu.Denomination;
+                            _uow.CashUnits.Add(CashUnit.Create(
+                                atm.Id, cu.UnitId, cu.currency, Guid.NewGuid().ToString(),
+                                cu.Denomination, cu.Init.ToString(), cu.Count.ToString(), type, st));
 
-                            }
-
-                        }
-                        if (cu.UnitId == "LCU03")
-                        {
-                            var unit0 = cashunits.Where(x => x.Name == "LCU03").FirstOrDefault();
-                            if (unit0 != null)
-                            {
-                                unit0.TotalCount = cu.Init.ToString();
-                                unit0.CurrentCount = cu.Count.ToString();
-                                unit0.Denomination = cu.Denomination;
-
-                            }
-
-                        }
-                        if (cu.UnitId == "LCU04")
-                        {
-                            var unit0 = cashunits.Where(x => x.Name == "LCU04").FirstOrDefault();
-                            if (unit0 != null)
-                            {
-                                unit0.TotalCount = cu.Init.ToString();
-                                unit0.CurrentCount = cu.Count.ToString();
-                                unit0.Denomination = cu.Denomination;
-
-                            }
-
+                         
                         }
                     }
                 }

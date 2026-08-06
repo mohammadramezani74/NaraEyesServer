@@ -21,12 +21,15 @@ namespace NaraEyes.Infrastructure.Persistence
         public static IServiceCollection RegisterPersistenceServices(this IServiceCollection services, IConfiguration configuration)
         {
 
-
             services.AddEFSecondLevelCache(options =>
             {
                 options.UseMemoryCacheProvider()
-                       .CacheAllQueries(CacheExpirationMode.Sliding, TimeSpan.FromMinutes(15))
-                       .ConfigureLogging(true);
+                      
+                       .CacheQueriesContainingTableNames(
+                            CacheExpirationMode.Absolute, TimeSpan.FromMinutes(10),
+                            TableNameComparison.ContainsOnly,
+                            "Branches", "Users", "Roles")   
+                       .ConfigureLogging(false);
             });
             services.AddSingleton<CustomSecondLevelCacheInterceptor>();
             services.AddSingleton<AuditInterceptor>();
