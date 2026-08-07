@@ -182,7 +182,7 @@ namespace NaraEyes.Application.Services.Modules
                     int current = 0;
                     _ = int.TryParse(cash.CurrentCount, NumberStyles.Integer,
                                      CultureInfo.InvariantCulture, out current);
-                    int amount = (int)current * cash.Denomination / 10;
+                    long amount = (long)current * cash.Denomination / 10;
                     result.Add(new Cassette(
                     cash.Name,
                     cash.Denomination,

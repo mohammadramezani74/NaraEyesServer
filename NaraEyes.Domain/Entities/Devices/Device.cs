@@ -226,7 +226,7 @@ string mobileNo
         public void ReRegister(int code,string ip, string model, string? agentVersion)
         {
             Ip = NormalizeIp(ip);
-            if (Code <= 0 && code > 0)
+            if ((Code is null || Code <= 0) && code > 0)
                 Code = code;
             AgentVersion = NormalizeVersion(agentVersion);
 

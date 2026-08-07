@@ -168,8 +168,17 @@
                     <MudTd DataLabel="ظرفیت">@context.Capacity.ToString("N0")</MudTd>
                     <MudTd DataLabel="مانده">
                         <div class="d-flex align-center">
-                            <MudProgressLinear Value="@context.FillPercent" Max="100" Rounded="true" Class="me-2" Style="width:160px" />
-                            <MudText Typo="Typo.caption">@($"{context.Remaining:N0} ({context.FillPercent:0}%)")</MudText>
+                            @if (context.HasFillPercent)
+                            {
+                                <MudProgressLinear Value="@context.FillPercent" Max="100" Rounded="true"
+                                                   Class="me-2" Style="width:160px" />
+                                <MudText Typo="Typo.caption">@($"{context.Remaining:N0} ({context.FillPercent:0}%)")</MudText>
+                            }
+                            else
+                            {
+                                @* کاست ریجکت — ظرفیت تعریف‌شده ندارد، فقط تعداد را نشان بده *@
+                                <MudText Typo="Typo.caption">@($"{context.Remaining:N0} برگ")</MudText>
+                            }
                         </div>
                     </MudTd>
                     <MudTd DataLabel="وضعیت">
@@ -393,7 +402,7 @@
 
     private void RecalibrateCassette(Cassette c)
     {
-        c.Status = c.FillPercent < 15 ? "Empty" : (c.FillPercent < 35 ? "Low" : "OK");
+        // c.Status = c.FillPercent < 15 ? "Empty" : (c.FillPercent < 35 ? "Low" : "OK");
         Snackbar.Add($"{c.Name} کالیبره شد.", Severity.Info);
         StateHasChanged();
     }

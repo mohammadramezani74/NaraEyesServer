@@ -9,6 +9,7 @@
 @using NaraEyes.Application.Contracts.Models.Basic
 @using NaraEyes.Application.Contracts.Models.Devices
 @using NaraEyes.Domain.Enumerations            
+@using NaraEyes.WebApplication.Common
 @using NaraEyes.WebApplication.Components.Dialogs
 @using static NaraEyes.WebApplication.Components.Dialogs.FileUploadDialog
 @inject ISnackbar Snackbar
@@ -178,25 +179,18 @@
 </MudTable>
 @if (_isLoadingScreenshot)
 {
-    <MudOverlay Visible="true" DarkBackground="true">
-        <MudPaper Class="pa-6 d-flex flex-column align-center" Style="position: relative; min-width: 250px;">
-            
-            @* دکمه بستن در بالای کارت *@
-            <MudIconButton Icon="@Icons.Material.Filled.Close" 
-                           Color="Color.Error" 
-                           OnClick="CancelLoading" 
-                           Style="position: absolute; top: 8px; right: 8px;" />
-
-            <MudProgressCircular Indeterminate="true"
-                                 Color="Color.Primary"
-                                 Size="Size.Large"
-                                 Class="mt-4" />
-
-            <MudText Class="mt-4" Typo="Typo.body1">
-                لطفا منتظر بمانید...
+    <MudOverlay Visible="true" DarkBackground="true" ZIndex="9999">
+        <div class="d-flex flex-column align-center">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Class="mt-4" Typo="Typo.body1">در حال ارتباط با دستگاه…</MudText>
+            <MudText Class="mt-1" Typo="Typo.caption">
+                این عملیات ممکن است تا ۳۰ ثانیه طول بکشد.
             </MudText>
-            
-        </MudPaper>
+            <MudButton Class="mt-4" Variant="Variant.Text" Color="Color.Secondary"
+                       OnClick="CancelLoading">
+                انصراف
+            </MudButton>
+        </div>
     </MudOverlay>
 }
 <script>
@@ -234,11 +228,12 @@
     private Task? _refreshLoop;
     private void CancelLoading()
     {
+        _cancellationTokenSource?.Cancel();
+
+        // توکن جدید برای عملیات بعدی
+        _cancellationTokenSource = new CancellationTokenSource();
+
         _isLoadingScreenshot = false;
-
-        // اگر از CancellationTokenSource استفاده می‌کنی:
-        // _cts?.Cancel();
-
         StateHasChanged();
     }
     // شعب از سرویس
@@ -250,12 +245,20 @@
     }
     private static bool LooksLikeZip(byte[] data)
     => data != null && data.Length >= 4 && data[0] == 0x50 && data[1] == 0x4B; // 'PK'
-
+    private AsyncOperationRunner _ops = default!;
     protected override async Task OnInitializedAsync()
     {
         try
         {
+         
+
             _branches = await BranchService.GetAllBranches(_cancellationTokenSource!.Token);
+            _ops = new AsyncOperationRunner(
+        owner: this,
+        snackbar: Snackbar,
+        invokeAsync: f => InvokeAsync(f),
+        setBusy: b => _isLoadingScreenshot = b,
+        logError: (ex, msg) => _logger.Error(ex, msg));
         }
         catch (Exception ex)
         {
@@ -453,276 +456,106 @@
     } 
 
     // ---- Actions (فعلاً Snackbar؛ بعداً به IDeviceControlService وصل می‌کنیم) ----
-    private async Task UpdateStatuses(DeviceViewModel d)
-    {
-        _logger.Info("Device status update requested. IP={IP}", d.Ip);
-        _isLoadingScreenshot = true;
-        var result = await DeviceService.GetForcesStatus(d.Ip, _cancellationTokenSource.Token);
-        _isLoadingScreenshot = false;
-        if (result)
-        {
-            _logger.Info("Device status update SUCCESS. IP={IP}", d.Ip);
-            Snackbar.Add($"بروزرسانی دستگاه {d.Ip} با موفقیت انجام شد", Severity.Success);}
-        else
-        {
-            _logger.Warn("Device status update FAILED (service returned false). IP={IP}", d.Ip);
-            Snackbar.Add("دستگاه موفق به بروزرسانی وضعیت نشد.", Severity.Warning);
-        }
+    private Task UpdateStatuses(DeviceViewModel d) => _ops.RunAsync(
+           operationKey: $"status:{d.Ip}",
+           title: "بروزرسانی وضعیت",
+           work: ct => DeviceService.GetForcesStatus(d.Ip, ct),
+           ct: _cancellationTokenSource!.Token,
+           successMessage: $"وضعیت دستگاه {d.Ip} بروزرسانی شد.",
+           failureMessage: "دستگاه وضعیت جدید ارسال نکرد.");
 
-    }
     private void Screenshot2(DeviceViewModel d)      => Snackbar.Add("اسکرین‌شات: " + d.DisplayName, Severity.Success);
     private async Task Screenshot(DeviceViewModel d)
     {
-        _logger.Info("Screenshot request started. IP={IP}, Device={Device}", d.Ip, d.DisplayName);
+        if (!EnsureOnline(d)) return;
+        var bytes = await _ops.RunAsync(
+            operationKey: $"screenshot:{d.Ip}",
+            title: "اسکرین‌شات",
+            work: ct => DeviceService.RequestScreenshotAsync(d.Ip, ct),
+            ct: _cancellationTokenSource!.Token,
+            emptyMessage: "تصویری از دستگاه دریافت نشد.",
+            isEmpty: b => b is null || b.Length == 0);
 
-        _isLoadingScreenshot = true;
-        StateHasChanged();
+        if (bytes is null || bytes.Length == 0) return;
 
-        try
-        {
-            var bytes = await DeviceService.RequestScreenshotAsync(
-                d.Ip, _cancellationTokenSource.Token);
+        var dataUrl = "data:image/png;base64," + Convert.ToBase64String(bytes);
 
-            if (bytes is null || bytes.Length == 0)
-            {
-                Snackbar.Add("تصویری دریافت نشد.", Severity.Warning);
-                return;
-            }
-
-            var dataUrl = "data:image/png;base64," + Convert.ToBase64String(bytes);
-
-            var parameters = new DialogParameters
+        DialogService.Show<ScreenShotDialog>("اسکرین‌شات",
+            new DialogParameters
             {
                 ["ImageDataUrl"] = dataUrl,
                 ["Title"] = $"اسکرین‌شات {d.DisplayName}"
-            };
-
-            var options = new DialogOptions
+            },
+            new DialogOptions
             {
                 CloseButton = true,
                 MaxWidth = MaxWidth.ExtraLarge,
                 FullWidth = true,
                 Position = DialogPosition.Center
-            };
-
-            DialogService.Show<ScreenShotDialog>("اسکرین‌شات", parameters, options);
-            _logger.Info("Screenshot dialog opened. IP={IP}", d.Ip);
-        }
-        catch (TimeoutException ex)
-        {
-            _logger.Error(ex, "Screenshot TimeOut. IP={IP}", d.Ip);
-            Snackbar.Add("⏳ دستگاه پاسخ نداد. ممکن است آفلاین باشد یا ایجنت اجرا نشده باشد.",
-                         Severity.Warning);
-        }
-        catch (OperationCanceledException)
-        {
-            Snackbar.Add("درخواست اسکرین‌شات لغو شد.", Severity.Normal);
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Screenshot Exception. IP={IP}", d.Ip);
-            Snackbar.Add("خطا در دریافت اسکرین‌شات: " + ex.Message, Severity.Error);
-        }
-        finally
-        {
-            // 🔑 تحت هر شرایطی — این همان چیزی است که کم بود
-            _isLoadingScreenshot = false;
-            await InvokeAsync(StateHasChanged);
-        }
+            });
     }
-    private bool _isBusy;
+
     private async Task DownloadJournal(DeviceViewModel d)
     {
-        var parameters = new DialogParameters();
-        var options = new DialogOptions
-        {
-            CloseOnEscapeKey = true,
-            MaxWidth = MaxWidth.Small,
-            FullWidth = true,
-            Position = DialogPosition.Center
-        };
+        if (!EnsureOnline(d)) return;
+        var dialog = DialogService.Show<JournalRangeDialog>("دانلود ژورنال",
+            new DialogParameters(),
+            new DialogOptions
+            {
+                CloseOnEscapeKey = true,
+                MaxWidth = MaxWidth.Small,
+                FullWidth = true,
+                Position = DialogPosition.Center
+            });
 
-        var dialog = DialogService.Show<JournalRangeDialog>("دانلود ژورنال", parameters, options);
         var result = await dialog.Result;
-
-        if (result.Canceled)
-            return;
+        if (result.Canceled) return;
 
         var range = (DateRange)result.Data!;
-        var start = range.Start!.Value.Date; 
+        var start = range.Start!.Value.Date;
         var end = range.End!.Value.Date.AddDays(1).AddTicks(-1);
-        try
-        {
-            _isBusy = true;
-            StateHasChanged();
-            _logger.Info("Journal download started. IP={IP}, Start={Start}, End={End}",
-       d.Ip, start, end);
-            _isLoadingScreenshot = true;
-            var bytes = await DeviceService.RequestJournalAsync(d.Ip, start, end);
-            _isLoadingScreenshot = false;
-            if (bytes == null || bytes.Length == 0)
-            {
-                _logger.Warn("Journal empty result. IP={IP}, Start={Start}, End={End}",
-              d.Ip, start, end);
-                Snackbar.Add("ژورنالی در این بازه یافت نشد.", Severity.Warning);
-                return;
-            }
 
-            var safeIp = (d.Ip ?? "device").Replace('.', '_').Replace(':', '_');
-            var startToken = start.ToString("yyyyMMdd");
-            var endToken = end.ToString("yyyyMMdd");
+        var bytes = await _ops.RunAsync(
+            operationKey: $"journal:{d.Ip}",
+            title: "دریافت ژورنال",
+            work: ct => DeviceService.RequestJournalAsync(d.Ip, start, end, ct),
+            ct: _cancellationTokenSource!.Token,
+            emptyMessage: "ژورنالی در این بازه یافت نشد.",
+            isEmpty: b => b is null || b.Length == 0);
 
-            if (LooksLikeZip(bytes))
-            {
+        if (bytes is null || bytes.Length == 0) return;
 
-                var zipName = $"journal_{safeIp}_{startToken}-{endToken}.zip";
-                _logger.Info("Journal downloaded as ZIP. IP={IP}, File={FileName}, Size={Size}",
-       d.Ip, zipName, bytes.Length);
-                await SaveFileAsync(bytes, zipName, "application/zip");
-            }
-            else
-            {
+        var safeIp = (d.Ip ?? "device").Replace('.', '_').Replace(':', '_');
+        var name = $"journal_{safeIp}_{start:yyyyMMdd}-{end:yyyyMMdd}";
 
-                var txtName = $"journal_{safeIp}_{startToken}-{endToken}.txt";
-                _logger.Info("Journal returned as TXT . IP={IP}, File={FileName}",
-             d.Ip, txtName);
-                await SaveFileAsync(bytes, txtName, "text/plain");
-                Snackbar.Add("فایل دریافتی زیپ نبود؛ به‌صورت متن ذخیره شد.", Severity.Info);
-            }
+        if (LooksLikeZip(bytes))
+        {
+            await SaveFileAsync(bytes, name + ".zip", "application/zip");
+        }
+        else
+        {
+            await SaveFileAsync(bytes, name + ".txt", "text/plain");
+            Snackbar.Add("فایل دریافتی زیپ نبود؛ به‌صورت متن ذخیره شد.", Severity.Info);
+        }
 
-            Snackbar.Add("دانلود ژورنال آماده شد.", Severity.Success);
-        }
-        catch (TimeoutException ex)
-        {
-            _isLoadingScreenshot = false ;
-            _logger.Error( ex,"Journal download TIMEOUT. IP={IP}", d.Ip);
-            Snackbar.Add("⏳ دریافت ژورنال در زمان مقرر تکمیل نشد.", Severity.Warning);
-        }
-        catch (OperationCanceledException ex)
-        {
-            _isLoadingScreenshot = false;
-            _logger.Warn("Journal download CANCELED. IP={IP}", d.Ip);
-            Snackbar.Add("عملیات لغو شد.", Severity.Info);
-        }
-        catch (Exception ex)
-        {
-            _isLoadingScreenshot = false;
-            _logger.Error(ex, "Journal download ERROR. IP={IP}", d.Ip);
-            Snackbar.Add("خطا در دریافت ژورنال: " + ex.Message, Severity.Error);
-        }
-        finally
-        {
-            _isBusy = false;
-            StateHasChanged();
-        }
+        Snackbar.Add("دانلود ژورنال آماده شد.", Severity.Success);
     }
-    private async Task Reboot(DeviceViewModel d)
-    {
-        var confirm = await DialogService.ShowMessageBox(
-           "تأیید ریست دستگاه",
-           $"آیا از ریست دستگاه «{d?.SerialNo ?? d?.Ip}» مطمئن هستید؟",
-           yesText: "بله، ریست کن",
-           cancelText: "انصراف");
+    private Task Reboot(DeviceViewModel d) => _ops.RunAsync(
+        operationKey: $"reboot:{d.Ip}",
+        title: "راه‌اندازی مجدد",
+        work: ct => DeviceService.RestartOrShutdownDevice(true,d.Ip, ct),
+        ct: _cancellationTokenSource!.Token,
+        successMessage: $"فرمان راه‌اندازی مجدد برای {d.Ip} ارسال شد.",
+        failureMessage: "دستگاه فرمان را نپذیرفت.");
 
-        if (confirm is not true) return;
+    private Task Shutdown(DeviceViewModel d) => _ops.RunAsync(
+         operationKey: $"shutdown:{d.Ip}",
+         title: "خاموش کردن",
+         work: ct => DeviceService.RestartOrShutdownDevice(false, d.Ip, ct),
+         ct: _cancellationTokenSource!.Token,
+         successMessage: $"فرمان خاموشی برای {d.Ip} ارسال شد.",
+         failureMessage: "دستگاه فرمان را نپذیرفت.");
 
-        try
-        {
-            _isBusy = true;
-            StateHasChanged();
-            _logger.Warn("DEVICE REBOOT REQUESTED. Device={Device}, IP={IP}",
-           d.DisplayName, d.Ip);
-            _isLoadingScreenshot = true;
-            var ok = await DeviceService.RestartOrShutdownDevice(true, d.Ip);
-            _isLoadingScreenshot = false;
-            if (ok){
-                _logger.Info("DEVICE REBOOT SUCCESS. Device={Device}, IP={IP}",
-              d.DisplayName, d.Ip);
-                Snackbar.Add("دستگاه با موفقیت برای ریست زمان‌بندی شد (ممکن است ۵–۱۵ ثانیه طول بکشد).", Severity.Success);
-            }
-            else
-            {
-                _logger.Warn("DEVICE REBOOT FAILED (no ack from agent). Device={Device}, IP={IP}",
-               d.DisplayName, d.Ip);
-                Snackbar.Add("تأیید از ایجنت در بازهٔ تعیین‌شده دریافت نشد.",
-               Severity.Warning);
-
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            _isLoadingScreenshot = false;
-            Snackbar.Add("عملیات لغو شد.", Severity.Info);
-        }
-        catch (Exception ex)
-        {
-            _isLoadingScreenshot = false;
-            _logger.Error(ex,
-          "DEVICE REBOOT ERROR. Device={Device}, IP={IP}",
-          d.DisplayName, d.Ip);
-            Snackbar.Add("خطا در ارسال دستور ریست.", Severity.Error);
-        }
-        finally
-        {
-            _isBusy = false;
-            StateHasChanged();
-        }
-    }
-    private async Task Shutdown(DeviceViewModel d)
-    {
-        var confirm = await DialogService.ShowMessageBox(
-        "تأیید خاموش کردن",
-        $"دستگاه «{d?.SerialNo ?? d?.Ip}» خاموش شود؟",
-        yesText: "بله، خاموش کن",
-        cancelText: "انصراف");
-
-        if (confirm is not true) return;
-
-        try
-        {
-            _isBusy = true;
-            StateHasChanged();
-            _logger.Warn(
-     "DEVICE SHUTDOWN REQUESTED. Device={Device}, IP={IP}",
-     d.DisplayName, d.Ip);
-            _isLoadingScreenshot = true;
-            var ok = await DeviceService.RestartOrShutdownDevice(false, d.Ip);
-            _isLoadingScreenshot = false;
-            if (ok)
-            {
-                _logger.Info(
-                    "DEVICE SHUTDOWN SUCCESS. Device={Device}, IP={IP}",
-                    d.DisplayName, d.Ip);
-
-                Snackbar.Add("دستور خاموشی پذیرفته شد.", Severity.Success);
-            }
-            else
-            {
-                _logger.Warn(
-                    "DEVICE SHUTDOWN FAILED (no ack from agent). Device={Device}, IP={IP}",
-                    d.DisplayName, d.Ip);
-
-                Snackbar.Add(
-                    "تأیید از ایجنت در بازهٔ تعیین‌شده دریافت نشد.",
-                    Severity.Warning);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            _isLoadingScreenshot = false;
-            Snackbar.Add("عملیات لغو شد.", Severity.Info);
-        }
-        catch (Exception ex)
-        {
-            _isLoadingScreenshot = false;
-            Snackbar.Add("خطا در ارسال دستور خاموشی.", Severity.Error);
-        }
-        finally
-        {
-            _isBusy = false;
-            StateHasChanged();
-        }
-    }
     public async Task uploadDialog( string Ip)
     {
         var dialog = await DialogService.ShowAsync<FileUploadDialog>();
@@ -829,6 +662,15 @@
             }
             catch { }
         }
+    }
+    private bool EnsureOnline(DeviceViewModel d)
+    {
+        if (d.DeviceAgent is false)
+        {
+            Snackbar.Add($"دستگاه {d.Ip} آفلاین است — فرمان ارسال نشد.", Severity.Warning);
+            return false;
+        }
+        return true;
     }
     
 }

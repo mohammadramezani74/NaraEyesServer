@@ -648,7 +648,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             await _outbox.EnqueueCommandAsync(cmd, ct);
             _dispatchState.MarkCommandEnqueued(deviceIp);
 
-            var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(60), ct);
+            var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(30), ct);
             return (bytes is { Length: > 0 }) ? bytes : null;
         }
 
@@ -1163,7 +1163,8 @@ WHERE d.Ip = @Ip";
         }
 
 
-
+  
     }
+
 
 }

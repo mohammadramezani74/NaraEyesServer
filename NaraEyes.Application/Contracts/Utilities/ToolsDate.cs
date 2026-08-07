@@ -114,6 +114,10 @@ namespace NaraEyes.Application.Contracts.Utilities
         {
             return myMoney.ToString("N0", CultureInfo.CreateSpecificCulture("fa-ir"));
         }
+        public static string ToMoney(this long myMoney)
+        {
+            return myMoney.ToString("N0", CultureInfo.CreateSpecificCulture("fa-ir"));
+        }
 
         public static string ToFileName(this DateTime date)
         {
