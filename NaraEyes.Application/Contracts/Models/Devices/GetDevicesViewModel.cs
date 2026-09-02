@@ -14,6 +14,7 @@ namespace NaraEyes.Application.Contracts.Models.Devices
         public int? Code { get;  set; }
         public string Ip { get;  set; }
         public string? Model { get;  set; }
+        public DeviceVendor Vendor { get; set; } = DeviceVendor.Unknown;
         public DateTime InstallationDate { get;  set; }
         public string? Address { get;  set; }
         public string? SerialNo { get;  set; }

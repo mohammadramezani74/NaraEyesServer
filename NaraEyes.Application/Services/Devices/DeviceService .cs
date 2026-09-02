@@ -176,6 +176,7 @@ namespace NaraEyes.Application.Services.Devices
                       MobileNo = x.MobileNo,
                       Mode = x.Mode,
                       Model = x.Model,
+                      Vendor = x.Vendor,
                       SerialNo = x.SerialNo,
                       OperatorAddress = x.Operator.Address,
                       OperatorName = x.Operator.Name,

@@ -57,19 +57,13 @@
                 }
             }
         </MudSelect>
-        <MudItem xs="12" sm="6" md="2">
-            <MudSelect T="DeviceVendor ?"
-                       Value="_vendor"
-                       ValueChanged="OnVendorChanged"
-                       Label="سازنده"
-                       Clearable="true"
-                       AnchorOrigin="Origin.BottomCenter">
-                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Hyosung)">هیوسانگ</MudSelectItem>
-                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.GRG)">GRG</MudSelectItem>
-                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Other)">سایر</MudSelectItem>
-                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Unknown)">نامشخص</MudSelectItem>
-            </MudSelect>
-        </MudItem>
+        <MudSelect T="DeviceVendor ?" Value="_vendor" ValueChanged="OnVendorChanged" Dense="true" Class="mx-2" Clearable="true" AnchorOrigin="Origin.BottomCenter" Placeholder="سازنده">
+            <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)null)">همه سازندگان</MudSelectItem>
+            <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Hyosung)">هیوسانگ</MudSelectItem>
+            <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.GRG)">GRG</MudSelectItem>
+            <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Other)">سایر</MudSelectItem>
+            <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Unknown)">نامشخص</MudSelectItem>
+        </MudSelect>
      
         <!-- جستجو -->
         <MudTextField T="string"
@@ -665,7 +659,8 @@
         {
             Search = _search,
             Status = _status,
-            Branch = _branchId
+            Branch = _branchId,
+            Vendor = _vendor,
         };
         var base64=   await DeviceService.ExportExcelAsync(filter);
         if (string.IsNullOrWhiteSpace(base64))
