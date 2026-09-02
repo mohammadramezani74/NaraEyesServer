@@ -22,6 +22,7 @@ namespace NaraEyes.Application.Contracts.Models.Devices
         public decimal? Longitude { get; set; }
         public string? MobileNo { get; set; }
         public string? Model { get; set; }
+        public DeviceVendor Vendor { get; set; } = DeviceVendor.Unknown;
         public string? SerialNo { get; set; }
         public string? Tel { get; set; }
         public newcontact newContact { get; set; }

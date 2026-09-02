@@ -16,6 +16,7 @@ namespace NaraEyes.Domain.Entities.Devices
         public int? Code { get; private set; }
         public string Ip { get; private set; }
         public string? Model { get; private set; }
+        public DeviceVendor Vendor { get; private set; } = DeviceVendor.Unknown;
         public bool AgentStatus { get; set; }
         public DateTime InstallationDate { get; private set; }
         public string? Address { get; private set; }
@@ -97,6 +98,7 @@ namespace NaraEyes.Domain.Entities.Devices
 
 
         public void SetMode(DeviceMode mode) => Mode = mode;
+        public void SetVendor(DeviceVendor vendor) => Vendor = vendor;
 
         public void SetDescription(string? description) => Description = NormalizeOrNull(description);
 
@@ -123,22 +125,23 @@ namespace NaraEyes.Domain.Entities.Devices
         /// هر فیلدی که در ویومدل آمده، روی موجودیت اعمال می‌شود.
         /// </summary>
         public void ApplyUpdate(
-            int? code,
-            string ip,
-            string? model,
-            DateTime? installationDate,
-            string? address,
-            string? serialNo,
-            string? tel,
-            string? mobileNo,
-            Guid? branchId,
-            string? description,
-            decimal? latitude,
-            decimal? longitude,
-            bool isActive,
-            Guid? operatorId,
-            ContactInfo? contact
-        )
+           int? code,
+           string ip,
+           string? model,
+           DateTime? installationDate,
+           string? address,
+           string? serialNo,
+           string? tel,
+           string? mobileNo,
+           Guid? branchId,
+           string? description,
+           decimal? latitude,
+           decimal? longitude,
+           bool isActive,
+           Guid? operatorId,
+           ContactInfo? contact,
+           DeviceVendor vendor = DeviceVendor.Unknown   // ← جدید
+       )
         {
             UpdateIdentity(code, ip, model, serialNo);
             SetInstallationDate(installationDate);
@@ -151,8 +154,8 @@ namespace NaraEyes.Domain.Entities.Devices
             Operator = contact;
             OperatorId = operatorId;
             BranchId = branchId;
+            Vendor = vendor;                              // ← جدید
         }
-
 
 
 
@@ -192,7 +195,8 @@ decimal? longitude,
 decimal? latitude,
 string? Description,
 Guid branchId,
-string mobileNo
+string mobileNo,
+DeviceVendor vendor = DeviceVendor.Unknown
 
 )
         {
@@ -200,6 +204,7 @@ string mobileNo
             d.Ip = ip;
             d.Code = code;
             d.Model = model;
+            d.Vendor = vendor;
             d.SerialNo = serialNo;
             d.IsActive = true;
             d.Mode = DeviceMode.Supervisor;

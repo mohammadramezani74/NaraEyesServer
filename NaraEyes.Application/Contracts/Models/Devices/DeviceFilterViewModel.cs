@@ -17,6 +17,8 @@ namespace NaraEyes.Application.Contracts.Models.Devices
 
         /// <summary>فیلتر شعبه (دقیق)</summary>
         public Guid? Branch { get; set; }
+        /// <summary>فیلتر بر اساس سازنده دستگاه</summary>
+        public DeviceVendor? Vendor { get; set; }
 
         /// <summary>شماره صفحه (۱-مبنا)</summary>
         public int Page { get; set; } = 1;

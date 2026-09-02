@@ -207,7 +207,7 @@ namespace NaraEyes.Application.Services.Devices
             var branchId = model.BranchId == Guid.Empty ? null : model.BranchId;
             entity.ApplyUpdate(model.Code, model.Ip, model.Model, model.InstallationDate,
                 model.Address, model.SerialNo, model.Tel, model.MobileNo, branchId,
-                model.Description, model.Latitude, model.Longitude, model.IsActive, null, null);
+                model.Description, model.Latitude, model.Longitude, model.IsActive, null, null, model.Vendor);
             entity.Operator = contact;
             if(contact!=null)
             entity.OperatorId = contact.Id;
@@ -232,7 +232,7 @@ namespace NaraEyes.Application.Services.Devices
                 return op.Failed("امکان اضافه کردن دستگاه بیشتر از 15 عدد وجود ندارد");
             }
             Device? entity = Device.RegisterNewDev(model.Code, model.Ip, model.Model, model.SerialNo, model.Address, model.Longitude,
-                model.Latitude,model.Description,model.BranchId.Value,model.MobileNo);
+                model.Latitude,model.Description,model.BranchId.Value,model.MobileNo, model.Vendor);
 
             var userid =await GetUserId();
             entity.CreatedByUserId = userid;
@@ -323,8 +323,9 @@ namespace NaraEyes.Application.Services.Devices
                     || (d.Code != null && EF.Functions.Like(d.Code.ToString()!, $"%{s}%"))
                 );
             }
-
-            if (filter.Status.HasValue)
+                if (filter.Vendor.HasValue)
+                    baseQuery = baseQuery.Where(d => d.Vendor == filter.Vendor.Value);
+                if (filter.Status.HasValue)
                 baseQuery = baseQuery.Where(d => d.Mode == filter.Status.Value);
 
             if (filter.Branch.HasValue)
@@ -345,6 +346,8 @@ namespace NaraEyes.Application.Services.Devices
                 "seen" => desc ? baseQuery.OrderByDescending(d => d.LastHeartbeat)
                                : baseQuery.OrderBy(d => d.LastHeartbeat),
                 "serial" => desc ? baseQuery.OrderByDescending(d => d.SerialNo) : baseQuery.OrderBy(d => d.SerialNo),
+                "vendor" => desc ? baseQuery.OrderByDescending(d => d.Vendor)
+                                : baseQuery.OrderBy(d => d.Vendor),
                 _ => baseQuery.OrderBy(d => d.Code)
             };
 
@@ -432,7 +435,8 @@ namespace NaraEyes.Application.Services.Devices
                     SerialNo = d.SerialNo,
                     Model = d.Model ?? string.Empty,
                     Branch = d.Branch?.Name,                    // اگر navigation لود شد
-                    Status = d.Mode,                            // DeviceMode → همان Status در VM
+                    Status = d.Mode,
+                    Vendor = d.Vendor,// DeviceMode → همان Status در VM
                     LastSeen = d.LastHeartbeat ?? DateTime.Now,
                     UpdatedAt = GuessUpdatedAt(d),                 // توضیح زیر
                     LastCommand = "AllDeviceStatus",

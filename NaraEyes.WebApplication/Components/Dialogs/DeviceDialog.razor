@@ -4,6 +4,7 @@
 @using NaraEyes.Application.Contracts.Interfaces.Base
 @using NaraEyes.Application.Contracts.Models.Basic
 @using NaraEyes.Application.Contracts.Models.Devices
+@using NaraEyes.Domain.Enumerations
 @inject ISnackbar Snackbar
 @inject IDeviceService DeviceService
 @inject IBranchService BranchService
@@ -29,6 +30,17 @@
                         </MudItem>
                         <MudItem xs="12" sm="6">
                             <MudTextField @bind-Value="Model.Model" Label="نام" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="DeviceVendor"
+                                       @bind-Value="Model.Vendor"
+                                       Label="سازنده دستگاه"
+                                       AnchorOrigin="Origin.BottomCenter">
+                                <MudSelectItem Value="@DeviceVendor.Hyosung">هیوسانگ</MudSelectItem>
+                                <MudSelectItem Value="@DeviceVendor.GRG">GRG</MudSelectItem>
+                                <MudSelectItem Value="@DeviceVendor.Other">سایر</MudSelectItem>
+                                <MudSelectItem Value="@DeviceVendor.Unknown">نامشخص</MudSelectItem>
+                            </MudSelect>
                         </MudItem>
 
                         <MudItem xs="12" sm="6">

@@ -16,6 +16,7 @@ namespace NaraEyes.Application.Contracts.Models.Devices
         public string Ip { get; set; } = string.Empty;
         public string? SerialNo { get; set; }
         public string Model { get; set; } = string.Empty;
+        public DeviceVendor Vendor { get; set; } = DeviceVendor.Unknown;
         public string? Branch { get; set; }
         public DeviceMode Status { get; set; }
 

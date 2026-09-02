@@ -12,6 +12,7 @@
 @using NaraEyes.WebApplication.Common
 @using NaraEyes.WebApplication.Components.Dialogs
 @using static NaraEyes.WebApplication.Components.Dialogs.FileUploadDialog
+@using NaraEyes.Domain.Enumerations
 @inject ISnackbar Snackbar
 @inject IDeviceService DeviceService
 @inject IBranchService BranchService
@@ -56,6 +57,19 @@
                 }
             }
         </MudSelect>
+        <MudItem xs="12" sm="6" md="2">
+            <MudSelect T="DeviceVendor ?"
+                       Value="_vendor"
+                       ValueChanged="OnVendorChanged"
+                       Label="سازنده"
+                       Clearable="true"
+                       AnchorOrigin="Origin.BottomCenter">
+                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Hyosung)">هیوسانگ</MudSelectItem>
+                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.GRG)">GRG</MudSelectItem>
+                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Other)">سایر</MudSelectItem>
+                <MudSelectItem T="DeviceVendor ?" Value="@((DeviceVendor?)DeviceVendor.Unknown)">نامشخص</MudSelectItem>
+            </MudSelect>
+        </MudItem>
      
         <!-- جستجو -->
         <MudTextField T="string"
@@ -86,6 +100,9 @@
         <MudTh><MudTableSortLabel SortLabel="status" T="DeviceViewModel">وضعیت ایجنت</MudTableSortLabel></MudTh>
          <MudTh><MudTableSortLabel SortLabel="name"     T="DeviceViewModel">کد دستگاه</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="name"     T="DeviceViewModel">نام دستگاه</MudTableSortLabel></MudTh>
+        <MudTh>
+            <MudTableSortLabel SortLabel="vendor" T="DeviceViewModel">سازنده</MudTableSortLabel>
+        </MudTh>
         <MudTh><MudTableSortLabel SortLabel="ip"       T="DeviceViewModel">آی‌پی</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="branch"   T="DeviceViewModel">شعبه</MudTableSortLabel></MudTh>
         <MudTh><MudTableSortLabel SortLabel="serial"   T="DeviceViewModel">سریال</MudTableSortLabel></MudTh>
@@ -119,6 +136,29 @@
             </MudText></MudTd>
         <MudTd DataLabel="کد دستگاه"><MudText Typo="Typo.body2" Class="font-semibold">@context.DisplayName</MudText></MudTd>
         <MudTd DataLabel="نام دستگاه"><MudText Typo="Typo.body2" Class="font-semibold">@context.Model</MudText></MudTd>
+        <MudTd DataLabel="سازنده">
+            @switch (context.Vendor)
+            {
+                case DeviceVendor.Hyosung:
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info"
+                             Variant="Variant.Outlined">هیوسانگ</MudChip>
+                    break;
+
+                case DeviceVendor.GRG:
+                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary"
+                             Variant="Variant.Outlined">GRG</MudChip>
+                    break;
+
+                case DeviceVendor.Other:
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                             Variant="Variant.Outlined">سایر</MudChip>
+                    break;
+
+                default:
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">—</MudText>
+                    break;
+            }
+        </MudTd>
         <MudTd DataLabel="آی‌پی">@context.Ip</MudTd>
         <MudTd DataLabel="شعبه">@context.Branch</MudTd>
         <MudTd DataLabel="سریال">@(@context.SerialNo ?? "—")</MudTd>
@@ -308,6 +348,7 @@
             {
                 Search = _search,
                 Status = _status,
+                Vendor = _vendor,
                 Branch = _branchId,
                 Page = state.Page + 1,              // TableState.Page صفر مبناست
                 PageSize = state.PageSize,
@@ -566,6 +607,13 @@
             await UploadFile(uploadResult.File, Ip);
 
         }
+    }
+    private DeviceVendor? _vendor;
+
+    private async Task OnVendorChanged(DeviceVendor? v)
+    {
+        _vendor = v;
+        if (table is not null) await table.ReloadServerData();
     }
     private async Task UploadFile(IBrowserFile file, string Ip)
     {

@@ -1,4 +1,6 @@
-﻿namespace NaraEyes.Application.Contracts.Models.Devices
+﻿using NaraEyes.Domain.Enumerations;
+
+namespace NaraEyes.Application.Contracts.Models.Devices
 {
     public sealed class CreateDeviceViewModel
     {
@@ -12,6 +14,7 @@
         public string? MobileNo { get; set; }
         public string? Model { get; set; }
         public string? SerialNo { get; set; }
+        public DeviceVendor Vendor { get; set; } = DeviceVendor.Unknown;
 
 
     }

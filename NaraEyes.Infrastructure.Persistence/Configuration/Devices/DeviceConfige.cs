@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using NaraEyes.Domain.Entities.Devices;
+using NaraEyes.Domain.Enumerations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,6 +18,12 @@ namespace NaraEyes.Infrastructure.Persistence.Configuration.Devices
 
             builder.HasKey(x => x.Id);
             builder.Property(x => x.Id).ValueGeneratedNever();
+
+            builder.Property(x => x.Vendor)
+                .HasConversion<int>()
+                .HasDefaultValue(DeviceVendor.Unknown);
+
+            builder.HasIndex(x => x.Vendor);
 
             builder.HasIndex(x => x.Code)
                    .HasDatabaseName("IX_Device_Code")
