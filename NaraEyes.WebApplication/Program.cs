@@ -12,6 +12,7 @@ using NaraEyes.Infrastructure;
 using NaraEyes.Infrastructure.Persistence;
 using NaraEyes.Infrastructure.Persistence.Context;
 using NaraEyes.WebApplication;
+using NaraEyes.WebApplication.Common;
 using NaraEyes.WebApplication.Components;
 using NaraEyes.WebApplication.Extensions;
 using Serilog;
@@ -165,7 +166,7 @@ app.MapRazorComponents<App>()
 
 app.MapIdentityEndpoints();
 app.MapHub<DeviceHub>("/deviceHub");
-
+app.UseMiddleware<AgentKeyMiddleware>();
 app.MapGet("/ping", () => "ok");
 app.MapGet("/api/poll", async (
     string ip,

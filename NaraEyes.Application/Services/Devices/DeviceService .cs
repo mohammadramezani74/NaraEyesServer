@@ -45,6 +45,13 @@ namespace NaraEyes.Application.Services.Devices
         private readonly ICommandDispatchState _dispatchState;
         private static readonly CultureInfo _gregorian = CreateGregorian();
         private readonly IDbConnectionFactory _connectionFactory;
+        // → یک چرخه‌ی کامل معطلی. پس هیچ تایم‌اوتی نباید زیر ۳۵ ثانیه باشد.
+        private static readonly TimeSpan PollCycle = TimeSpan.FromSeconds(35);
+
+        private static readonly TimeSpan AckTimeout = PollCycle + TimeSpan.FromSeconds(15);  // ۵۰
+        private static readonly TimeSpan ScreenshotTimeout = PollCycle + TimeSpan.FromSeconds(25);  // ۶۰
+        private static readonly TimeSpan StatusTimeout = PollCycle + TimeSpan.FromSeconds(20);  // ۵۵
+        private static readonly TimeSpan JournalTimeout = PollCycle + TimeSpan.FromSeconds(40);
 
         public DeviceService(IApplicationUnitOfWork uow, ICommandAwaiter await, IOutboxService outbox, IAckAwaiter ack, AuthenticationStateProvider _auth,
                   IApplicationUserManager userManamager, ICommandDispatchState dispatchState, IDbConnectionFactory connectionFactory)
@@ -473,7 +480,7 @@ namespace NaraEyes.Application.Services.Devices
             };
             await _outbox.EnqueueCommandAsync(cmd, ct);
             _dispatchState.MarkCommandEnqueued(deviceIp);
-            var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(25), ct);
+            var bytes = await _await.WaitForBytesAsync(cmd.Id, ScreenshotTimeout, ct);
             return bytes;
         }
         public async Task<bool> RequestResetCdmAsync(string deviceIp, CancellationToken ct = default)
@@ -490,7 +497,7 @@ namespace NaraEyes.Application.Services.Devices
 
             _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+            var ack = await _ack.WaitForAckAsync(id, AckTimeout, ct);
             return ack.Accepted;
         }
         public async Task<DeviceMetricsViewModel?> RequestGetMetricsAsync(string deviceIp, CancellationToken ct = default)
@@ -509,7 +516,7 @@ namespace NaraEyes.Application.Services.Devices
             await _outbox.EnqueueCommandAsync(cmd, ct);
 
                 _dispatchState.MarkCommandEnqueued(deviceIp);
-                var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+                var ack = await _ack.WaitForAckAsync(id, AckTimeout, ct);
             if (ack.Accepted)
             {
                 var metrics = await _uow.Devices.AsNoTracking()
@@ -590,7 +597,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
 
             _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+            var ack = await _ack.WaitForAckAsync(id, AckTimeout, ct);
             return ack.Accepted;
         }
         public async Task<bool> RequestResetIdcAsync(string deviceIp, CancellationToken ct = default)
@@ -607,7 +614,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
 
             _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+            var ack = await _ack.WaitForAckAsync(id, AckTimeout, ct);
             return ack.Accepted;
         }
         public async Task<bool> GetForcesStatus(string deviceIp, CancellationToken ct = default)
@@ -624,7 +631,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             _dispatchState.MarkCommandEnqueued(deviceIp);
 
 
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+            var ack = await _ack.WaitForAckAsync(id, StatusTimeout, ct);
             return ack.Accepted;
         }
         public async Task<byte[]?> RequestJournalAsync(string deviceIp, DateTime startLocal, DateTime endLocal, CancellationToken ct = default)
@@ -648,7 +655,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             await _outbox.EnqueueCommandAsync(cmd, ct);
             _dispatchState.MarkCommandEnqueued(deviceIp);
 
-            var bytes = await _await.WaitForBytesAsync(cmd.Id, TimeSpan.FromSeconds(30), ct);
+            var bytes = await _await.WaitForBytesAsync(cmd.Id, JournalTimeout, ct);
             return (bytes is { Length: > 0 }) ? bytes : null;
         }
 
@@ -674,7 +681,7 @@ usage=x.CurrentMetrics.CpuUsage??0,
             await _outbox.EnqueueCommandAsync(cmd, cancellationToken);
             _dispatchState.MarkCommandEnqueued(deviceIp);
             // منتظر ACK از ایجنت
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), cancellationToken);
+            var ack = await _ack.WaitForAckAsync(id, AckTimeout, cancellationToken);
             return ack.Accepted;
 
         }
@@ -796,7 +803,7 @@ WHERE d.Ip = @Ip";
             await _outbox.EnqueueCommandAsync(cmd, ct);
             _dispatchState.MarkCommandEnqueued(deviceIp);
 
-            var ack = await _ack.WaitForAckAsync(id, TimeSpan.FromSeconds(15), ct);
+            var ack = await _ack.WaitForAckAsync(id, AckTimeout, ct);
             return ack.Accepted;
         }
         public async Task<byte[]> ConvertFileToBytesAsync(IBrowserFile file)

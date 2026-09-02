@@ -196,7 +196,31 @@ namespace NaraEyes.Application.Services.Metrics
 
             }
 
-            atm.SetStatus(command.Mode,command.IsInservice);
+            // ── محافظ سمت سرور برای وضعیت دوربین ────────────────────
+            // اگر ایجنت خطای دوربین را تشخیص نداده باشد، اینجا اصلاح می‌شود.
+            if (command.CameraStatus is not null)
+            {
+                ushort camDev = command.CameraStatus.Device;
+
+                // 0=ONLINE  6=BUSY → سالم. هر چیز دیگری خطاست.
+                bool cameraFaulty = camDev != 0 && camDev != 6;
+
+                // وضعیت تک‌تک دوربین‌ها: 2 = CAMINOP
+                if (!cameraFaulty && command.CameraStatus.Detailes is not null)
+                {
+                    cameraFaulty = command.CameraStatus.Detailes
+                        .Any(d => d.Camera == 2 || d.Media == 2);
+                }
+
+                if (cameraFaulty && command.Mode != DeviceMode.Error)
+                {
+                  
+
+                    command.Mode = DeviceMode.Error;
+                }
+            }
+
+            atm.SetStatus(command.Mode, command.IsInservice);
 
             mode = command.Mode;
 
