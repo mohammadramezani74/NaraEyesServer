@@ -30,10 +30,11 @@ namespace NaraEyes.Infrastructure.Persistence.Unitofwork
 
                 return op.succedded();
             }
-            catch (DbUpdateConcurrencyException e)
+            catch (DbUpdateConcurrencyException)
             {
-
-                return op.Failed(e.Message);
+                return op.Failed(
+                    "این رکورد توسط کاربر یا سرویس دیگری تغییر کرده است. " +
+                    "لطفاً صفحه را تازه کنید و دوباره تلاش کنید.");
             }
             catch (DbUpdateException e)
             {

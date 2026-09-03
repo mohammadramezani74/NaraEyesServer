@@ -246,6 +246,90 @@ namespace NaraEyes.Application.Services.Metrics
                 _ => HealthStatus.Unknown, 
             };
         }
+        /// <summary>
+        /// آیا این وضعیت به معنای اختلال در کارکرد قطعه است؟
+        ///
+        /// DeviceNotFound عمداً خطا نیست — یعنی این قطعه اصلاً روی دستگاه
+        /// نصب نشده. اگر خطا حسابش کنیم، هر ATMی که مثلاً دوربین ندارد
+        /// برای همیشه «خراب» گزارش می‌شود.
+        ///
+        /// Busy هم موقتی است و در چرخه‌ی بعدی برطرف می‌شود.
+        /// </summary>
+        private static bool IsFaultState(HealthStatus s) => s switch
+        {
+            HealthStatus.Online => false,
+            HealthStatus.Busy => false,
+            HealthStatus.DeviceNotFound => false,
+            HealthStatus.Unknown => false,   // نامشخص ≠ خراب
+
+            HealthStatus.Offline => true,
+            HealthStatus.PowerOff => true,
+            HealthStatus.HardwareError => true,
+            HealthStatus.UserError => true,
+            HealthStatus.FraudAttempt => true,
+            HealthStatus.PotentialFraud => true,
+
+            _ => false,
+        };
+        private static string StatusFa(HealthStatus s) => s switch
+        {
+            HealthStatus.Online => "آنلاین",
+            HealthStatus.Offline => "آفلاین",
+            HealthStatus.PowerOff => "بدون برق",
+            HealthStatus.DeviceNotFound => "دستگاه یافت نشد",
+            HealthStatus.HardwareError => "خطای سخت‌افزاری",
+            HealthStatus.UserError => "خطای کاربری",
+            HealthStatus.Busy => "مشغول",
+            HealthStatus.FraudAttempt => "تلاش برای تقلب",
+            HealthStatus.PotentialFraud => "احتمال تقلب",
+            _ => "نامشخص",
+        };
+        /// <summary>
+        /// بازه‌ی خرابی را باز، به‌روز یا بسته می‌کند.
+        ///
+        /// فقط هنگام «تغییر» می‌نویسد، نه در هر چرخه‌ی متریک — بنابراین
+        /// دستگاهی که یک ماه خراب بماند فقط یک ردیف دارد.
+        /// </summary>
+        private async Task TrackModuleFaultAsync(
+            Device atm,
+            Guid? moduleId,
+            DeviceModuleType moduleType,
+            HealthStatus newStatus,
+            ushort rawStatus,
+            DateTime now,
+            CancellationToken ct)
+        {
+            bool isFaulty = IsFaultState(newStatus);
+
+            var openFault = await _uow.ModuleFaultLogs
+                .FirstOrDefaultAsync(f => f.DeviceId == atm.Id
+                                       && f.Module == moduleType
+                                       && f.ResolvedAt == null, ct);
+
+            if (isFaulty)
+            {
+                if (openFault is null)
+                {
+                    // شروع خرابی جدید
+                    var fault = ModuleFaultLog.Open(
+                        atm.Id, moduleId, moduleType,
+                        newStatus, rawStatus, StatusFa(newStatus), now);
+
+                    _uow.ModuleFaultLogs.Add(fault);
+                }
+                else
+                {
+                    // هنوز خراب است — اگر نوع خطا عوض شده، همان بازه را
+                    // به‌روز کن. بازه بسته نمی‌شود چون از دید عملیاتی
+                    // دستگاه در تمام این مدت از کار افتاده بوده.
+                    openFault.Transition(newStatus, rawStatus, StatusFa(newStatus), now);
+                }
+            }
+            else if (openFault is not null)
+            {
+                openFault.Resolve(now);
+            }
+        }
         private const int MaxSnapshots = 10;
 
         private bool IsError(HealthStatus status)
@@ -324,6 +408,8 @@ namespace NaraEyes.Application.Services.Metrics
            
                 currentStatus.Update(newStatus, json, 0);
             }
+            await TrackModuleFaultAsync(
+               atm, module.Id, moduleType, newStatus, deviceCode.Value, now, ct);
 
             return IsError(newStatus);
         }

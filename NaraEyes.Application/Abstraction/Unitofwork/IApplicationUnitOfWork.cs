@@ -33,6 +33,7 @@ namespace NaraEyes.Application.Abstraction.Unitofwork
         public DbSet<Campaign> Campaigns { get; }
         public DbSet<CampaignTarget> CampaignTargets { get; }
        public DbSet<ArchivedDevice> ArchivedDevice { get; }
+        public DbSet<ModuleFaultLog> ModuleFaultLogs { get; }
 
     }
 }

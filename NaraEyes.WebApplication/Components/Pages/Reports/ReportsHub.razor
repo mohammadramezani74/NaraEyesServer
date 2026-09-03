@@ -1,0 +1,159 @@
+﻿@page "/reports-hub"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using MudBlazor
+@using NaraEyes.WebApplication.Common
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@attribute [Authorize]
+
+<PageTitle>مرکز گزارش‌ها</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+
+    <div class="d-flex align-center mb-1">
+        <MudIcon Icon="@Icons.Material.Filled.Assessment" Color="Color.Primary"
+                 Size="Size.Large" Class="ms-3" />
+        <MudText Typo="Typo.h5">مرکز گزارش‌ها</MudText>
+    </div>
+
+    <MudText Typo="Typo.body2" Color="Color.Tertiary" Class="mb-6">
+        گزارش موردنظر خود را انتخاب کنید
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_visible.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">
+            گزارشی برای سطح دسترسی شما تعریف نشده است.
+        </MudAlert>
+    }
+    else
+    {
+        @foreach (var category in OrderedCategories())
+        {
+            var items = _visible.Where(r => r.Category == category).ToList();
+            if (items.Count == 0) continue;
+
+            <MudText Typo="Typo.subtitle1" Class="mt-6 mb-3 report-cat-title">
+                @category
+            </MudText>
+
+            <MudGrid Spacing="3">
+                @foreach (var r in items)
+                {
+                    <MudItem xs="12" sm="6" md="4" lg="3">
+                        <MudCard Elevation="2"
+                                 Class="@($"report-card {(r.IsReady ? "" : "report-card-soon")}")"
+                                 Style="height:100%"
+                                 @onclick="@(() => Open(r))">
+                            <MudCardContent Class="d-flex flex-column" Style="height:100%">
+
+                                <div class="d-flex align-center mb-3">
+                                    <MudIcon Icon="@r.Icon"
+                                             Color="@(r.IsReady ? Color.Primary : Color.Default)"
+                                             Size="Size.Large" Class="ms-3" />
+                                    <div>
+                                        <MudText Typo="Typo.h6">@r.TitleFa</MudText>
+                                        @if (!r.IsReady)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                                     Variant="Variant.Outlined" Class="mt-1">
+                                                به‌زودی
+                                            </MudChip>
+                                        }
+                                    </div>
+                                </div>
+
+                                <MudText Typo="Typo.body2" Color="Color.Tertiary" Style="flex:1">
+                                    @r.DescriptionFa
+                                </MudText>
+
+                                @if (r.IsReady)
+                                {
+                                    <div class="d-flex justify-end mt-3">
+                                        <MudIcon Icon="@Icons.Material.Filled.ArrowBack"
+                                                 Color="Color.Primary" Size="Size.Small" />
+                                    </div>
+                                }
+
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    }
+
+</MudContainer>
+
+<style>
+    .report-cat-title {
+        border-right: 3px solid var(--mud-palette-primary);
+        padding-right: 10px;
+        font-weight: 600;
+    }
+
+    .report-card {
+        cursor: pointer;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+        .report-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+        }
+
+    .report-card-soon {
+        cursor: not-allowed;
+        opacity: .55;
+    }
+
+        .report-card-soon:hover {
+            transform: none;
+            box-shadow: none;
+        }
+</style>
+
+@code {
+    private List<ReportDefinition> _visible = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await AuthProvider.GetAuthenticationStateAsync();
+            var user = state.User;
+
+            // فقط گزارش‌هایی که کاربر به آن‌ها دسترسی دارد
+            _visible = ReportCatalog.All
+                .Where(r => r.Roles.Any(role => user.IsInRole(role)))
+                .ToList();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private IEnumerable<string> OrderedCategories()
+    {
+        // اول دسته‌های تعریف‌شده به ترتیب، بعد هر دسته‌ی ناشناخته
+        foreach (var c in ReportCatalog.CategoryOrder)
+            yield return c;
+
+        foreach (var c in _visible.Select(r => r.Category).Distinct())
+            if (!ReportCatalog.CategoryOrder.Contains(c))
+                yield return c;
+    }
+
+    private void Open(ReportDefinition r)
+    {
+        if (!r.IsReady) return;
+        Nav.NavigateTo(r.Route);
+    }
+}

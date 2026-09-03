@@ -1,0 +1,467 @@
+﻿@page "/reports/module-faults"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Interfaces.Reports
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Models.Reports
+@using NaraEyes.Application.Common.Excel
+@using NaraEyes.Domain.Enumerations
+@inject IModuleFaultReportService FaultService
+@inject IBranchService BranchService
+@inject ISupervisionStateService SupervisionService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@attribute [Authorize(Roles = "مدیریت مرکزی,مدیریت مانیتورینگ")]
+@implements IAsyncDisposable
+
+<PageTitle>گزارش خرابی قطعات</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+
+    @* ---------- سرصفحه ---------- *@
+    <div class="d-flex align-center mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="@(() => Nav.NavigateTo("/reports-hub"))"
+                       Title="بازگشت به مرکز گزارش‌ها" />
+        <MudIcon Icon="@Icons.Material.Filled.BuildCircle" Color="Color.Primary"
+                 Size="Size.Large" Class="ms-2 me-2" />
+        <div>
+            <MudText Typo="Typo.h5">گزارش خرابی قطعات</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                تعداد و مدت خرابی هر ماژول سخت‌افزاری
+            </MudText>
+        </div>
+    </div>
+
+    @* ---------- فیلترها ---------- *@
+    <ReportFilterBar Filter="_filter"
+                     Branches="_branches"
+                     Supervisions="_supervisions"
+                     OnApply="LoadAsync"
+                     IsLoading="_loading">
+        <ExtraFilters>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="DeviceModuleType ?" @bind-Value="_filter.Module"
+                           Label="ماژول" Dense="true" Clearable="true"
+                           Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)null)">همه ماژول‌ها</MudSelectItem>
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)DeviceModuleType.Cdm)">پرداخت‌کننده</MudSelectItem>
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)DeviceModuleType.Idc)">کارت‌خوان</MudSelectItem>
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)DeviceModuleType.Ptr)">چاپگر رسید</MudSelectItem>
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)DeviceModuleType.Pin)">پین‌پد</MudSelectItem>
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)DeviceModuleType.Siu)">حسگرها</MudSelectItem>
+                    <MudSelectItem T="DeviceModuleType ?" Value="@((DeviceModuleType?)DeviceModuleType.Camera)">دوربین</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2">
+                <MudNumericField @bind-Value="_filter.MinDurationMinutes"
+                                 Label="حداقل مدت (دقیقه)"
+                                 Min="0" Max="10080" Step="15"
+                                 Dense="true" Variant="Variant.Outlined"
+                                 HelperText="خرابی‌های کوتاه‌تر نمایش داده نمی‌شوند" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_filter.OnlyOpen" Color="Color.Error"
+                           Label="فقط خرابی‌های فعلی" />
+            </MudItem>
+        </ExtraFilters>
+    </ReportFilterBar>
+
+    @* ---------- محتوا ---------- *@
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-6" />
+    }
+    else if (_result is null)
+    {
+        <MudAlert Severity="Severity.Normal" Class="my-4">
+            برای مشاهده‌ی گزارش، فیلترها را تنظیم کرده و دکمه‌ی «اعمال» را بزنید.
+        </MudAlert>
+    }
+    else if (_result.Rows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Success" Class="my-4">
+            در بازه‌ی انتخابی هیچ خرابی بیش از @_filter.MinDurationMinutes دقیقه ثبت نشده است.
+        </MudAlert>
+    }
+    else
+    {
+        @* ---------- کارت‌های خلاصه ---------- *@
+        <MudGrid Spacing="3" Class="mb-5">
+            <MudItem xs="6" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi-card">
+                    <MudText Typo="Typo.h4" Color="Color.Error">@_result.TotalFaults.ToString("#,##0")</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Tertiary">کل خرابی‌ها</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi-card">
+                    <MudText Typo="Typo.h6">@ReportExcelBuilder.FormatDuration(_result.TotalDownSeconds)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Tertiary">مجموع زمان خرابی</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi-card">
+                    <MudText Typo="Typo.h4" Color="@(_result.OpenFaults > 0 ? Color.Warning : Color.Success)">
+                        @_result.OpenFaults
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Tertiary">خرابی فعلی</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi-card">
+                    <MudText Typo="Typo.h6">@(_result.WorstModuleFa ?? "—")</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Tertiary">پرخراب‌ترین ماژول</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* ---------- نمودار ---------- *@
+        @if (_result.ByModule.Count > 1)
+        {
+            <MudPaper Elevation="2" Class="pa-4 mb-5">
+                <MudText Typo="Typo.subtitle1" Class="mb-3">توزیع خرابی به تفکیک ماژول</MudText>
+                <MudChart ChartType="ChartType.Bar"
+                          ChartSeries="@_chartSeries"
+                          XAxisLabels="@_chartLabels"
+                          Width="100%" Height="280px" />
+            </MudPaper>
+        }
+
+        @* ---------- جدول ---------- *@
+        <MudTable Items="_result.Rows" Dense="true" Hover="true" Striped="true"
+                  Elevation="2" Filter="MatchesSearch" @ref="_table"
+                  OnRowClick="@((TableRowClickEventArgs<ModuleFaultSummaryRow> e) => ShowDetailsAsync(e.Item))"
+                  RowClass="cursor-pointer">
+
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">جزئیات به تفکیک دستگاه</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="_search" Placeholder="جستجو در نتایج"
+                              Immediate="true" Dense="true" Class="mt-0"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                <MudTooltip Text="خروجی اکسل">
+                    <MudIconButton Icon="@Icons.Custom.FileFormats.FileExcel"
+                                   Color="Color.Success" Variant="Variant.Filled"
+                                   OnClick="ExportAsync" Disabled="_exporting" Class="ms-3" />
+                </MudTooltip>
+            </ToolBarContent>
+
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<ModuleFaultSummaryRow, object>(x => x.DeviceIp)">دستگاه</MudTableSortLabel></MudTh>
+                <MudTh>شعبه</MudTh>
+                <MudTh>سازنده</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ModuleFaultSummaryRow, object>(x => x.ModuleFa)">ماژول</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ModuleFaultSummaryRow, object>(x => x.FaultCount)">تعداد</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ModuleFaultSummaryRow, object>(x => x.TotalDownSeconds)" InitialDirection="SortDirection.Descending">مجموع زمان</MudTableSortLabel></MudTh>
+                <MudTh>میانگین</MudTh>
+                <MudTh>بیشترین</MudTh>
+                <MudTh>آخرین خرابی</MudTh>
+                <MudTh>وضعیت</MudTh>
+            </HeaderContent>
+
+            <RowTemplate>
+                <MudTd DataLabel="دستگاه">
+                    <div>@context.DeviceIp</div>
+                    @if (!string.IsNullOrWhiteSpace(context.DeviceName))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Tertiary">@context.DeviceName</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="شعبه">@(context.BranchName ?? "—")</MudTd>
+                <MudTd DataLabel="سازنده">@context.VendorFa</MudTd>
+                <MudTd DataLabel="ماژول">@context.ModuleFa</MudTd>
+                <MudTd DataLabel="تعداد">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                             Color="@(context.FaultCount >= 5 ? Color.Error
+                                                                 : context.FaultCount >= 3 ? Color.Warning : Color.Default)">
+                    @context.FaultCount
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="مجموع زمان">@ReportExcelBuilder.FormatDuration(context.TotalDownSeconds)</MudTd>
+            <MudTd DataLabel="میانگین">@context.AvgDownMinutes دقیقه</MudTd>
+            <MudTd DataLabel="بیشترین">@ReportExcelBuilder.FormatDuration(context.MaxDownSeconds)</MudTd>
+            <MudTd DataLabel="آخرین خرابی">@ReportExcelBuilder.ToJalali(context.LastFaultAt, true)</MudTd>
+            <MudTd DataLabel="وضعیت">
+                @if (context.HasOpenFault)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">
+                            در حال خرابی
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                            برطرف شده
+                        </MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+
+            <PagerContent>
+                <MudTablePager RowsPerPageString="تعداد در صفحه:"
+                               InfoFormat="{first_item}-{last_item} از {all_items}" />
+            </PagerContent>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Color="Color.Tertiary" Class="mt-2 d-block">
+            برای دیدن جزئیات هر ردیف، روی آن کلیک کنید.
+        </MudText>
+    }
+
+</MudContainer>
+
+@* ---------- دیالوگ جزئیات ---------- *@
+<MudDialog @bind-Visible="_detailsOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="ms-2" />
+            تاریخچه خرابی — @_detailsTitle
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_detailsLoading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (_details.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">رکوردی یافت نشد.</MudAlert>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                <thead>
+                    <tr>
+                        <th>نوع خطا</th>
+                        <th>شروع</th>
+                        <th>پایان</th>
+                        <th>مدت</th>
+                        <th>تغییر وضعیت</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in _details)
+                    {
+                        <tr>
+                            <td>
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(d.IsOpen ? Color.Error : Color.Default)">
+                                    @d.StatusFa
+                                </MudChip>
+                            </td>
+                            <td>@ReportExcelBuilder.ToJalali(d.StartedAt, true)</td>
+                            <td>
+                                @if (d.ResolvedAt is null)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Error">هنوز برطرف نشده</MudText>
+                                }
+                                else
+                                {
+                                    @ReportExcelBuilder.ToJalali(d.ResolvedAt, true)
+                                }
+                            </td>
+                            <td>@ReportExcelBuilder.FormatDuration(d.DurationSeconds)</td>
+                            <td>@(d.TransitionCount > 0 ? $"{d.TransitionCount} بار" : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _detailsOpen = false)">بستن</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .kpi-card {
+        transition: transform .15s;
+    }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+        }
+
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    private readonly ModuleFaultFilter _filter = new();
+    private ModuleFaultReportResult? _result;
+
+    private List<BranchesViewModel> _branches = new();
+    private List<SupervisionStateViewModel> _supervisions = new();
+
+    private bool _loading;
+    private bool _exporting;
+    private string _search = "";
+
+    private MudTable<ModuleFaultSummaryRow>? _table;
+
+    // ---- دیالوگ جزئیات ----
+    private bool _detailsOpen;
+    private bool _detailsLoading;
+    private string _detailsTitle = "";
+    private List<ModuleFaultDetailRow> _details = new();
+
+    private readonly DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Large,
+        FullWidth = true,
+        CloseButton = true,
+    };
+
+    // ---- نمودار ----
+    private List<ChartSeries> _chartSeries = new();
+    private string[] _chartLabels = Array.Empty<string>();
+
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await BranchService.GetAllBranches(_cts.Token);
+            _supervisions = await SupervisionService.GetSupervisionStates(_cts.Token);
+        }
+        catch
+        {
+            // نبود لیست فیلترها نباید مانع باز شدن صفحه شود
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _result = await FaultService.GetSummaryAsync(_filter, _cts.Token);
+            BuildChart();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت گزارش: " + ex.Message, Severity.Error);
+            _result = null;
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void BuildChart()
+    {
+        if (_result is null || _result.ByModule.Count == 0)
+        {
+            _chartSeries = new();
+            _chartLabels = Array.Empty<string>();
+            return;
+        }
+
+        _chartLabels = _result.ByModule.Select(x => x.ModuleFa).ToArray();
+
+        _chartSeries = new List<ChartSeries>
+        {
+            new()
+            {
+                Name = "تعداد خرابی",
+                Data = _result.ByModule.Select(x => (double)x.Count).ToArray()
+            },
+            new()
+            {
+                Name = "ساعت خرابی",
+                Data = _result.ByModule.Select(x => Math.Round(x.DownSeconds / 3600.0, 1)).ToArray()
+            },
+        };
+    }
+
+    private bool MatchesSearch(ModuleFaultSummaryRow r)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+
+        var s = _search.Trim();
+        return (r.DeviceIp?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.DeviceName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.BranchName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.ModuleFa?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private async Task ShowDetailsAsync(ModuleFaultSummaryRow row)
+    {
+        _detailsTitle = $"{row.DeviceIp} / {row.ModuleFa}";
+        _details = new();
+        _detailsLoading = true;
+        _detailsOpen = true;
+        StateHasChanged();
+
+        try
+        {
+            _details = await FaultService.GetDetailsAsync(
+                row.DeviceId, row.Module, _filter, _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت جزئیات: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _detailsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var bytes = await FaultService.ExportExcelAsync(_filter, _cts.Token);
+
+            if (bytes is null || bytes.Length == 0)
+            {
+                Snackbar.Add("فایلی تولید نشد.", Severity.Warning);
+                return;
+            }
+
+            var name = $"گزارش-خرابی-قطعات-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+            var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+            await JS.InvokeVoidAsync("downloadBase64File",
+                mime, Convert.ToBase64String(bytes), name);
+
+            Snackbar.Add("خروجی اکسل آماده شد.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در تولید اکسل: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        try { _cts.Cancel(); _cts.Dispose(); } catch { }
+        return ValueTask.CompletedTask;
+    }
+}

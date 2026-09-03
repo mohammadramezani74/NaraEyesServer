@@ -1,22 +1,45 @@
 ﻿@using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
 @using NaraEyes.Application.Contracts.Interfaces.Identity
 @inject IUserService service
+@inject AuthenticationStateProvider AuthProvider
+
 <MudPaper Width="250px" Elevation="0" Class="py-3">
     <MudNavMenu Color="Color.Info" Bordered="true">
+
         <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard" IconColor="Color.Secondary">داشبورد</MudNavLink>
         <MudNavLink Href="/devices" Icon="@Icons.Material.Filled.Devices" IconColor="Color.Secondary">دستگاه ها</MudNavLink>
         <MudNavLink Href="/bulk-operations" Icon="@Icons.Material.Filled.GroupWork" IconColor="Color.Secondary">عملیات گروهی</MudNavLink>
-      @if(IsFullAccess){
-        <MudNavLink Href="/report" Icon="@Icons.Material.Filled.Newspaper" IconColor="Color.Secondary">گزارشات</MudNavLink>
-  
-        <MudNavLink Href="/management" Icon="@Icons.Material.Filled.ManageAccounts" IconColor="Color.Secondary">مرکز مدیریت</MudNavLink>
-}
+
+        @* گزارش‌ها برای همه‌ی نقش‌هایی که حداقل به یک گزارش دسترسی دارند *@
+        @if (HasAnyReport)
+        {
+            <MudNavLink Href="/reports-hub" Icon="@Icons.Material.Filled.Assessment" IconColor="Color.Secondary">
+                گزارشات
+            </MudNavLink>
+        }
+
+        @if (IsFullAccess)
+        {
+            <MudNavLink Href="/management" Icon="@Icons.Material.Filled.ManageAccounts" IconColor="Color.Secondary">مرکز مدیریت</MudNavLink>
+        }
+
     </MudNavMenu>
 </MudPaper>
-@code{
+
+@code {
     bool IsFullAccess = false;
+    bool HasAnyReport = false;
+
     protected override async Task OnInitializedAsync()
     {
         IsFullAccess = await service.IsUserInRole("مدیریت مرکزی");
+
+        // اگر کاربر به حداقل یک گزارش دسترسی دارد، منو نمایش داده شود
+        var state = await AuthProvider.GetAuthenticationStateAsync();
+        var user = state.User;
+
+        HasAnyReport = NaraEyes.WebApplication.Common.ReportCatalog.All
+            .Any(r => r.Roles.Any(role => user.IsInRole(role)));
     }
 }
