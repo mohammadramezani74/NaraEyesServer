@@ -42,6 +42,7 @@ namespace NaraEyes.Application
             services.AddSingleton<ICommandDispatchState, CommandDispatchState>();
             services.AddHostedService<HeartbeatMonitor>();
             services.AddScoped<IModuleFaultReportService, ModuleFaultReportService>();
+            services.AddHostedService<DataRetentionService>();
             return services;
         }
     }
