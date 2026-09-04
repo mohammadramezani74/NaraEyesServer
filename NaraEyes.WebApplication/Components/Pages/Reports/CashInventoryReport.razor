@@ -1,0 +1,492 @@
+﻿@page "/reports/cash-inventory"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Common.Excel
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Interfaces.Reports
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Models.Reports
+@using NaraEyes.Application.Services.Reports
+@using NaraEyes.Domain.Enumerations
+@inject ICashInventoryReportService CashService
+@inject IBranchService BranchService
+@inject ISupervisionStateService SupervisionService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@attribute [Authorize(Roles = "مدیریت مرکزی,مدیریت استان")]
+@implements IAsyncDisposable
+
+<PageTitle>گزارش موجودی کاست‌ها</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+
+    @* ---------- سرصفحه ---------- *@
+    <div class="d-flex align-center mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="@(() => Nav.NavigateTo("/reports-hub"))"
+                       Title="بازگشت" />
+        <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Color="Color.Primary"
+                 Size="Size.Large" Class="ms-2 me-2" />
+        <div>
+            <MudText Typo="Typo.h5">گزارش موجودی کاست‌ها</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                موجودی فعلی و ارزش ریالی، به تفکیک یا تجمیعی
+            </MudText>
+        </div>
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Success"
+                   StartIcon="@Icons.Custom.FileFormats.FileExcel"
+                   OnClick="ExportAsync"
+                   Disabled="@(_exporting || _loading || _result is null || _result.Rows.Count == 0)">
+            @(_exporting ? "در حال آماده‌سازی…" : "خروجی اکسل")
+        </MudButton>
+    </div>
+
+    @* ---------- انتخاب نوع نمایش ---------- *@
+    <MudPaper Elevation="1" Class="pa-3 mb-4">
+        <MudToggleGroup T="CashGroupBy" Value="_filter.GroupBy"
+                        ValueChanged="OnGroupChanged"
+                        Color="Color.Primary" Size="Size.Medium"
+                        CheckMark="true" FixedContent="true">
+            <MudToggleItem Value="@CashGroupBy.Cassette" Text="به تفکیک کاست" />
+            <MudToggleItem Value="@CashGroupBy.Device" Text="جمع هر دستگاه" />
+            <MudToggleItem Value="@CashGroupBy.Branch" Text="جمع هر شعبه" />
+            <MudToggleItem Value="@CashGroupBy.Supervision" Text="جمع هر سرپرستی" />
+        </MudToggleGroup>
+    </MudPaper>
+
+    @* ---------- فیلترها ---------- *@
+    <ReportFilterBar Filter="_filter"
+                     Branches="_branches"
+                     Supervisions="_supervisions"
+                     OnApply="LoadAsync"
+                     IsLoading="_loading"
+                     ShowDateRange="false">
+        <ExtraFilters>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="CashUnitType?" @bind-Value="_filter.UnitType"
+                           Label="نوع کاست" Dense="true" Clearable="true"
+                           Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="CashUnitType?" Value="@((CashUnitType?)null)">همه انواع</MudSelectItem>
+                    <MudSelectItem T="CashUnitType?" Value="@((CashUnitType?)CashUnitType.Bill)">پرداختی</MudSelectItem>
+                    <MudSelectItem T="CashUnitType?" Value="@((CashUnitType?)CashUnitType.Reject)">ریجکت</MudSelectItem>
+                    <MudSelectItem T="CashUnitType?" Value="@((CashUnitType?)CashUnitType.Recycle)">بازیافتی</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_filter.OnlyLowOrEmpty" Color="Color.Warning"
+                           Label="فقط کم یا خالی" />
+            </MudItem>
+        </ExtraFilters>
+    </ReportFilterBar>
+
+    @* ---------- محتوا ---------- *@
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-6" />
+    }
+    else if (_result is null || _result.Rows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="my-4">
+            داده‌ای برای نمایش یافت نشد.
+        </MudAlert>
+    }
+    else
+    {
+        @* ---------- کارت‌های خلاصه ---------- *@
+        <MudGrid Spacing="3" Class="mb-5">
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi">
+                    <MudText Typo="Typo.h6" Color="Color.Success">
+                        @CashInventoryReportService.ToMoneyFa(_result.TotalAmount)
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">مجموع موجودی (ریال)</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi">
+                    <MudText Typo="Typo.h6">
+                        @CashInventoryReportService.ToMoneyFa(_result.TotalCapacityAmount)
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">ظرفیت کل</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi">
+                    @if (_result.OverallFillPercent >= 0)
+                    {
+                        <MudProgressCircular Value="_result.OverallFillPercent" Size="Size.Medium"
+                                             Color="@FillColor(_result.OverallFillPercent)" />
+                        <MudText Typo="Typo.body2" Class="mt-1">@(_result.OverallFillPercent + "٪")</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.h6">—</MudText>
+                    }
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">درصد پرشدگی</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi">
+                    <MudText Typo="Typo.h5">@_result.TotalDevices</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">دستگاه</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi">
+                    <MudText Typo="Typo.h5" Color="@(_result.EmptyUnits > 0 ? Color.Error : Color.Default)">
+                        @_result.EmptyUnits
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">کاست خالی</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="6" sm="4" md="2">
+                <MudPaper Elevation="2" Class="pa-4 text-center kpi">
+                    <MudText Typo="Typo.h5" Color="@(_result.LowUnits > 0 ? Color.Warning : Color.Default)">
+                        @_result.LowUnits
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">کاست کم</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* ---------- نمودار توزیع اسکناس ---------- *@
+        @if (_result.ByDenomination.Count > 1)
+        {
+            <MudPaper Elevation="2" Class="pa-4 mb-5">
+                <MudText Typo="Typo.subtitle1" Class="mb-3">توزیع موجودی بر اساس ارزش اسکناس</MudText>
+                <MudChart ChartType="ChartType.Donut"
+                          InputData="@_chartData"
+                          InputLabels="@_chartLabels"
+                          Width="320px" Height="320px" />
+            </MudPaper>
+        }
+
+        @* ---------- جدول ---------- *@
+        <MudTable Items="_result.Rows" Dense="true" Hover="true" Striped="true"
+                  Elevation="2" Filter="MatchesSearch">
+
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">@GroupTitle()</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="_search" Placeholder="جستجو" Immediate="true"
+                              Dense="true" Class="mt-0"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+            </ToolBarContent>
+
+            <HeaderContent>
+                @if (_filter.GroupBy == CashGroupBy.Cassette)
+                {
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.DeviceIp))">دستگاه</MudTableSortLabel></MudTh>
+                    <MudTh>شعبه</MudTh>
+                    <MudTh>کاست</MudTh>
+                    <MudTh>نوع</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.Denomination))">ارزش اسکناس</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.CurrentCount))">تعداد</MudTableSortLabel></MudTh>
+                    <MudTh>پرشدگی</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.CurrentAmount))">موجودی</MudTableSortLabel></MudTh>
+                    <MudTh>وضعیت</MudTh>
+                }
+                else
+                {
+                    <MudTh>@GroupColumnName()</MudTh>
+                    <MudTh>زیرمجموعه</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.UnitCount))">کاست</MudTableSortLabel></MudTh>
+                    <MudTh>کم/خالی</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.CurrentCount))">اسکناس</MudTableSortLabel></MudTh>
+                    <MudTh>پرشدگی</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="@(new Func<CashInventoryRow, object>(x => x.CurrentAmount))" InitialDirection="SortDirection.Ascending">موجودی</MudTableSortLabel></MudTh>
+                    <MudTh>ظرفیت</MudTh>
+                }
+            </HeaderContent>
+
+            <RowTemplate>
+                @if (_filter.GroupBy == CashGroupBy.Cassette)
+                {
+                    <MudTd DataLabel="دستگاه">
+                        <div>@context.DeviceIp</div>
+                        @if (context.DeviceCode is > 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Tertiary">کد @context.DeviceCode</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="شعبه">@(context.BranchName ?? "—")</MudTd>
+                    <MudTd DataLabel="کاست">@context.UnitName</MudTd>
+                    <MudTd DataLabel="نوع">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                 Color="@(context.UnitType == CashUnitType.Reject ? Color.Warning : Color.Default)">
+                            @context.UnitTypeFa
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="ارزش اسکناس">@context.Denomination.ToString("#,##0")</MudTd>
+                    <MudTd DataLabel="تعداد">@context.CurrentCount.ToString("#,##0")</MudTd>
+                    <MudTd DataLabel="پرشدگی">
+                        @if (context.HasFillPercent)
+                        {
+                            <div class="d-flex align-center">
+                                <MudProgressLinear Value="@context.FillPercent" Max="100"
+                                                   Color="@FillColor(context.FillPercent)"
+                                                   Rounded="true" Class="me-2" Style="width:70px" />
+                                <MudText Typo="Typo.caption">@(context.FillPercent + "٪")</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Tertiary">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="موجودی">
+                        <MudText Typo="Typo.body2">
+                            @CashInventoryReportService.ToMoneyFa(context.CurrentAmount)
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="وضعیت">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@StatusColor(context.UnitStatus)">
+                            @context.UnitStatusFa
+                        </MudChip>
+                    </MudTd>
+                }
+                else
+                {
+                    <MudTd DataLabel="@GroupColumnName()">@GroupLabel(context)</MudTd>
+                    <MudTd DataLabel="زیرمجموعه">@GroupSubLabel(context)</MudTd>
+                    <MudTd DataLabel="کاست">@context.UnitCount</MudTd>
+                    <MudTd DataLabel="کم/خالی">
+                        @if (context.LowOrEmptyCount > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                     Color="@(context.LowOrEmptyCount >= context.UnitCount ? Color.Error : Color.Warning)">
+                                @context.LowOrEmptyCount
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Success">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="اسکناس">@context.CurrentCount.ToString("#,##0")</MudTd>
+                    <MudTd DataLabel="پرشدگی">
+                        @if (context.HasFillPercent)
+                        {
+                            <div class="d-flex align-center">
+                                <MudProgressLinear Value="@context.FillPercent" Max="100"
+                                                   Color="@FillColor(context.FillPercent)"
+                                                   Rounded="true" Class="me-2" Style="width:70px" />
+                                <MudText Typo="Typo.caption">@(context.FillPercent + "٪")</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Tertiary">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="موجودی">
+                        <MudText Typo="Typo.body2" Color="Color.Success">
+                            @CashInventoryReportService.ToMoneyFa(context.CurrentAmount)
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="ظرفیت">
+                        @CashInventoryReportService.ToMoneyFa(context.TotalAmount)
+                    </MudTd>
+                }
+            </RowTemplate>
+
+            <PagerContent>
+                <MudTablePager RowsPerPageString="تعداد در صفحه:" />
+            </PagerContent>
+        </MudTable>
+    }
+
+</MudContainer>
+
+@code {
+    private readonly CashInventoryFilter _filter = new();
+    private CashInventoryResult? _result;
+
+    private List<BranchesViewModel> _branches = new();
+    private List<SupervisionStateViewModel> _supervisions = new();
+
+    private bool _loading;
+    private bool _exporting;
+    private string _search = "";
+
+    private double[] _chartData = Array.Empty<double>();
+    private string[] _chartLabels = Array.Empty<string>();
+
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await BranchService.GetAllBranches(_cts.Token);
+            _supervisions = await SupervisionService.GetSupervisionStates(_cts.Token);
+        }
+        catch { }
+
+        await LoadAsync();
+    }
+
+    private async Task OnGroupChanged(CashGroupBy g)
+    {
+        _filter.GroupBy = g;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _result = await CashService.GetInventoryAsync(_filter, _cts.Token);
+            BuildChart();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت گزارش: " + ex.Message, Severity.Error);
+            _result = null;
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void BuildChart()
+    {
+        if (_result is null || _result.ByDenomination.Count == 0)
+        {
+            _chartData = Array.Empty<double>();
+            _chartLabels = Array.Empty<string>();
+            return;
+        }
+
+        _chartData = _result.ByDenomination
+            .Select(x => (double)(x.Amount / 1_000_000))   // میلیون ریال
+            .ToArray();
+
+        _chartLabels = _result.ByDenomination
+            .Select(x => $"{x.Denomination:#,##0}")
+            .ToArray();
+    }
+
+    private bool MatchesSearch(CashInventoryRow r)
+    {
+        if (string.IsNullOrWhiteSpace(_search)) return true;
+
+        var s = _search.Trim();
+        return (r.DeviceIp?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.DeviceName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.BranchName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.SupervisionName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (r.UnitName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
+    }
+
+    private string GroupTitle() => _filter.GroupBy switch
+    {
+        CashGroupBy.Device      => "موجودی به تفکیک دستگاه",
+        CashGroupBy.Branch      => "موجودی به تفکیک شعبه",
+        CashGroupBy.Supervision => "موجودی به تفکیک سرپرستی",
+        _                       => "موجودی به تفکیک کاست",
+    };
+
+    private string GroupColumnName() => _filter.GroupBy switch
+    {
+        CashGroupBy.Device      => "دستگاه",
+        CashGroupBy.Branch      => "شعبه",
+        CashGroupBy.Supervision => "سرپرستی",
+        _                       => "",
+    };
+
+    private string GroupLabel(CashInventoryRow r) => _filter.GroupBy switch
+    {
+        CashGroupBy.Device      => r.DeviceIp ?? "—",
+        CashGroupBy.Branch      => r.BranchName ?? "—",
+        CashGroupBy.Supervision => r.SupervisionName ?? "—",
+        _                       => "",
+    };
+
+    private string GroupSubLabel(CashInventoryRow r) => _filter.GroupBy switch
+    {
+        CashGroupBy.Device      => r.BranchName ?? "—",
+        CashGroupBy.Branch      => r.SupervisionName ?? "—",
+        _                       => "—",
+    };
+
+    private static Color FillColor(int percent)
+    {
+        if (percent < 0)
+            return Color.Default;
+
+        if (percent < 15)
+            return Color.Error;
+
+        if (percent < 35)
+            return Color.Warning;
+
+        return Color.Success;
+    }
+
+    private static Color StatusColor(CashUnitStatus s) => s switch
+    {
+        CashUnitStatus.Ok          => Color.Success,
+        CashUnitStatus.Full        => Color.Success,
+        CashUnitStatus.Low         => Color.Warning,
+        CashUnitStatus.Empty       => Color.Error,
+        CashUnitStatus.Jammed      => Color.Error,
+        CashUnitStatus.Inoperative => Color.Error,
+        CashUnitStatus.Missing     => Color.Dark,
+        _                          => Color.Default,
+    };
+
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var bytes = await CashService.ExportExcelAsync(_filter, _cts.Token);
+
+            if (bytes is null || bytes.Length == 0)
+            {
+                Snackbar.Add("فایلی تولید نشد.", Severity.Warning);
+                return;
+            }
+
+            var name = $"گزارش-موجودی-کاست-{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+            var mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+            await JS.InvokeVoidAsync("downloadBase64File",
+                mime, Convert.ToBase64String(bytes), name);
+
+            Snackbar.Add("خروجی اکسل آماده شد.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در تولید اکسل: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        try { _cts.Cancel(); _cts.Dispose(); } catch { }
+        return ValueTask.CompletedTask;
+    }
+}

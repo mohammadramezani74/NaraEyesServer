@@ -43,6 +43,7 @@ namespace NaraEyes.Application
             services.AddHostedService<HeartbeatMonitor>();
             services.AddScoped<IModuleFaultReportService, ModuleFaultReportService>();
             services.AddHostedService<DataRetentionService>();
+            services.AddScoped<ICashInventoryReportService, CashInventoryReportService>();
             return services;
         }
     }

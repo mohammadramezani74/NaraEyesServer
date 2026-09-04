@@ -95,7 +95,7 @@ namespace NaraEyes.WebApplication.Common
                 Route:         "/reports/cash-inventory",
                 Category:      CatFinancial,
                 Roles:         new[] { RoleCentral, RoleProvince },
-                IsReady:       false),
+                IsReady:       true),
         };
 
         /// <summary>ترتیب نمایش دسته‌ها در صفحه‌ی فهرست</summary>

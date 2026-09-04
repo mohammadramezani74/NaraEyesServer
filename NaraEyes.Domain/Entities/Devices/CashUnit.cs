@@ -144,17 +144,52 @@ namespace NaraEyes.Domain.Entities.Devices
 
         // ========= Helpers =========
 
-        public int CurrentCountValue => int.Parse(CurrentCount);
-        public int TotalCountValue => int.Parse(TotalCount);
+        /// <summary>
+        /// تعداد اسکناس فعلی. اگر مقدار ذخیره‌شده معتبر نباشد صفر برمی‌گرداند.
+        ///
+        /// عمداً int.Parse نیست: CurrentCount از نوع string است و ممکن است
+        /// null، خالی یا غیرعددی باشد. استثنا در یک property باعث می‌شود
+        /// کل صفحه یا گزارش بشکند، آن هم بدون اینکه علتش واضح باشد.
+        /// </summary>
+        public int CurrentCountValue =>
+            int.TryParse(CurrentCount, out var v) && v >= 0 ? v : 0;
 
-        /// <summary>برمی‌گرداند تعداد اسکناس‌های مصرف شده.</summary>
-        public int ConsumedCount => TotalCountValue - CurrentCountValue;
+        /// <summary>ظرفیت اولیه. برای کاست ریجکت معمولاً صفر است.</summary>
+        public int TotalCountValue =>
+            int.TryParse(TotalCount, out var v) && v >= 0 ? v : 0;
 
-        /// <summary>ارزش پولی باقی‌مانده (Denomination * CurrentCount).</summary>
-        public long RemainingValue => (long)Denomination * CurrentCountValue;
+        /// <summary>تعداد اسکناس مصرف‌شده — هرگز منفی نمی‌شود</summary>
+        public int ConsumedCount =>
+            Math.Max(0, TotalCountValue - CurrentCountValue);
 
-        /// <summary>ارزش کل کاست (Denomination * Capacity).</summary>
-        public long TotalValue => (long)Denomination * TotalCountValue;
+        /// <summary>ارزش ریالی موجودی فعلی</summary>
+        public long RemainingValue =>
+            (long)Denomination * CurrentCountValue;
+
+        /// <summary>ارزش ریالی ظرفیت کامل</summary>
+        public long TotalValue =>
+            (long)Denomination * TotalCountValue;
+
+        /// <summary>
+        /// درصد پرشدگی. برای کاست ریجکت که ظرفیت اولیه ندارد،
+        /// −۱ برمی‌گرداند یعنی «قابل محاسبه نیست».
+        /// </summary>
+        public int FillPercent
+        {
+            get
+            {
+                int cap = TotalCountValue;
+                if (cap <= 0) return -1;
+
+                int cur = CurrentCountValue;
+                if (cur <= 0) return 0;
+
+                return (int)Math.Clamp(cur * 100.0 / cap, 0, 100);
+            }
+        }
+
+        /// <summary>آیا درصد پرشدگی معنا دارد؟</summary>
+        public bool HasFillPercent => TotalCountValue > 0;
     }
 
 }
