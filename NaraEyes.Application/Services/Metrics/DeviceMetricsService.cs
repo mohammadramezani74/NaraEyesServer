@@ -17,7 +17,77 @@ namespace NaraEyes.Application.Services.Metrics
     {
         private readonly IApplicationUnitOfWork _uow;
         private readonly IHubContext<DeviceHub> _hubContext;
+        /// <summary>
+        /// داده‌های ماژول‌های یک دستگاه که یک بار خوانده و بین شش فراخوانی
+        /// UpsertModuleStatusAsync به اشتراک گذاشته می‌شوند.
+        ///
+        /// بدون این، هر ماژول سه تا چهار کوئری جدا می‌زد.
+        /// </summary>
+        private sealed class ModuleContext
+        {
+            public Dictionary<Guid, DeviceModuleStatus> Statuses { get; init; } = new();
+            public Dictionary<Guid, int> SnapshotCounts { get; init; } = new();
+            public Dictionary<Guid, DeviceModuleStatusSnapshot> OldestSnapshots { get; init; } = new();
+            public Dictionary<DeviceModuleType, ModuleFaultLog> OpenFaults { get; init; } = new();
+        }
+        /// <summary>
+        /// همه‌ی داده‌ی موردنیاز شش ماژول را در چهار کوئری می‌خواند،
+        /// به‌جای بیست‌وچهار کوئری جدا.
+        /// </summary>
+        private async Task<ModuleContext> PreloadModuleContextAsync(
+            Device atm, CancellationToken ct)
+        {
+            var moduleIds = atm.Modules.Select(m => m.Id).ToList();
 
+            if (moduleIds.Count == 0)
+                return new ModuleContext();
+
+            // کوئری ۱ — وضعیت فعلی همه‌ی ماژول‌ها
+            var statuses = await _uow.DeviceModuleStatuses
+                .Where(x => moduleIds.Contains(x.DeviceModuleId))
+                .ToListAsync(ct);
+
+            // کوئری ۲ — تعداد اسنپ‌شات هر ماژول
+            var counts = await _uow.DeviceModuleStatusSnapshots
+                .Where(s => moduleIds.Contains(s.DeviceModuleId))
+                .GroupBy(s => s.DeviceModuleId)
+                .Select(g => new { ModuleId = g.Key, Count = g.Count() })
+                .ToListAsync(ct);
+
+            // کوئری ۳ — قدیمی‌ترین اسنپ‌شات هر ماژول (فقط آن‌هایی که به سقف رسیده‌اند)
+            var fullModuleIds = counts
+                .Where(c => c.Count >= MaxSnapshots)
+                .Select(c => c.ModuleId)
+                .ToList();
+
+            var oldest = new Dictionary<Guid, DeviceModuleStatusSnapshot>();
+
+            if (fullModuleIds.Count > 0)
+            {
+                var snaps = await _uow.DeviceModuleStatusSnapshots
+                    .Where(s => fullModuleIds.Contains(s.DeviceModuleId))
+                    .GroupBy(s => s.DeviceModuleId)
+                    .Select(g => g.OrderBy(s => s.CreateDate).First())
+                    .ToListAsync(ct);
+
+                oldest = snaps.ToDictionary(s => s.DeviceModuleId);
+            }
+
+            // کوئری ۴ — بازه‌های خرابی باز
+            var openFaults = await _uow.ModuleFaultLogs
+                .Where(f => f.DeviceId == atm.Id && f.ResolvedAt == null)
+                .ToListAsync(ct);
+
+            return new ModuleContext
+            {
+                Statuses = statuses.ToDictionary(x => x.DeviceModuleId),
+                SnapshotCounts = counts.ToDictionary(c => c.ModuleId, c => c.Count),
+                OldestSnapshots = oldest,
+                OpenFaults = openFaults
+                    .GroupBy(f => f.Module)
+                    .ToDictionary(g => g.Key, g => g.First()),
+            };
+        }
         public DeviceMetricsService(IApplicationUnitOfWork uow,IHubContext<DeviceHub> hubContext)
         {
             _hubContext = hubContext;
@@ -65,7 +135,7 @@ namespace NaraEyes.Application.Services.Metrics
         
             if (atm == null) { return op.Failed("دستگاهی یافت نشد!!"); }
             var atmmode = atm.Mode;
-
+            var mc = await PreloadModuleContextAsync(atm, cancellationToken);
             if (command.CdmStatus != null)
             {
                 haveError |= await UpsertModuleStatusAsync(
@@ -74,6 +144,7 @@ namespace NaraEyes.Application.Services.Metrics
     "CashDispenser",
     command.CdmStatus.Device,
     command.CdmStatus,
+     mc,
     cancellationToken);
             
             }
@@ -86,6 +157,7 @@ namespace NaraEyes.Application.Services.Metrics
                                                               "CardReader",
                                                               command.IdcStatus.Device,
                                                               command.IdcStatus,
+                                                               mc,
                                                               cancellationToken);
            
             }
@@ -98,6 +170,7 @@ namespace NaraEyes.Application.Services.Metrics
                                                               "ReceiptPrinter",
                                                               command.ptrStatus.Device,
                                                               command.ptrStatus,
+                                                               mc,
                                                               cancellationToken);
             
             }
@@ -109,6 +182,7 @@ namespace NaraEyes.Application.Services.Metrics
                                                               "Cameras",
                                                               command.CameraStatus.Device,
                                                               command.CameraStatus,
+                                                               mc,
                                                               cancellationToken);
            
             }
@@ -120,6 +194,7 @@ namespace NaraEyes.Application.Services.Metrics
                                                               "Sensors",
                                                               command.SiuStatus.Device,
                                                               command.SiuStatus,
+                                                               mc,
                                                               cancellationToken);
             
             }
@@ -130,7 +205,10 @@ namespace NaraEyes.Application.Services.Metrics
                                                               DeviceModuleType.Pin,
                                                               "Encryptor",
                                                               command.PinStatus.Device,
-                                                              command.PinStatus,cancellationToken);
+
+                                                              command.PinStatus,
+                                                               mc
+                                                               , cancellationToken);
            
             }
             if (command.Cashunit != null)
@@ -290,44 +368,43 @@ namespace NaraEyes.Application.Services.Metrics
         /// فقط هنگام «تغییر» می‌نویسد، نه در هر چرخه‌ی متریک — بنابراین
         /// دستگاهی که یک ماه خراب بماند فقط یک ردیف دارد.
         /// </summary>
-        private async Task TrackModuleFaultAsync(
+        /// <summary>
+        /// بازه‌ی خرابی را باز، به‌روز یا بسته می‌کند.
+        /// بازه‌های باز از ModuleContext می‌آیند، پس کوئری جدیدی نمی‌زند.
+        /// </summary>
+        private void TrackModuleFault(
             Device atm,
             Guid? moduleId,
             DeviceModuleType moduleType,
             HealthStatus newStatus,
             ushort rawStatus,
             DateTime now,
-            CancellationToken ct)
+            ModuleContext mc)
         {
             bool isFaulty = IsFaultState(newStatus);
 
-            var openFault = await _uow.ModuleFaultLogs
-                .FirstOrDefaultAsync(f => f.DeviceId == atm.Id
-                                       && f.Module == moduleType
-                                       && f.ResolvedAt == null, ct);
+            mc.OpenFaults.TryGetValue(moduleType, out var openFault);
 
             if (isFaulty)
             {
                 if (openFault is null)
                 {
-                    // شروع خرابی جدید
                     var fault = ModuleFaultLog.Open(
                         atm.Id, moduleId, moduleType,
                         newStatus, rawStatus, StatusFa(newStatus), now);
 
                     _uow.ModuleFaultLogs.Add(fault);
+                    mc.OpenFaults[moduleType] = fault;
                 }
                 else
                 {
-                    // هنوز خراب است — اگر نوع خطا عوض شده، همان بازه را
-                    // به‌روز کن. بازه بسته نمی‌شود چون از دید عملیاتی
-                    // دستگاه در تمام این مدت از کار افتاده بوده.
                     openFault.Transition(newStatus, rawStatus, StatusFa(newStatus), now);
                 }
             }
             else if (openFault is not null)
             {
                 openFault.Resolve(now);
+                mc.OpenFaults.Remove(moduleType);
             }
         }
         private const int MaxSnapshots = 10;
@@ -344,7 +421,8 @@ namespace NaraEyes.Application.Services.Metrics
     DeviceModuleType moduleType,
     string displayName,
     ushort? deviceCode,             
-    object statusPayload,         
+    object statusPayload,
+      ModuleContext mc,
     CancellationToken ct)
         {
             if (deviceCode == null) return false;
@@ -362,8 +440,8 @@ namespace NaraEyes.Application.Services.Metrics
             }
 
 
-            var currentStatus = await _uow.DeviceModuleStatuses
-                .FirstOrDefaultAsync(x => x.DeviceModuleId == module.Id, ct);
+            // از حافظه، نه دیتابیس
+            mc.Statuses.TryGetValue(module.Id, out var currentStatus);
 
             if (currentStatus == null)
             {
@@ -372,44 +450,39 @@ namespace NaraEyes.Application.Services.Metrics
 
                 _uow.DeviceModuleStatusSnapshots.Add(snapshot);
                 _uow.DeviceModuleStatuses.Add(status);
+
+                // برای ماژول تازه‌ساخته‌شده، context را هم به‌روز کن
+                mc.Statuses[module.Id] = status;
+                mc.SnapshotCounts[module.Id] = 1;
             }
             else
             {
-              
                 if (currentStatus.Status != newStatus)
                 {
-                
-                    var count = await _uow.DeviceModuleStatusSnapshots
-                        .Where(s => s.DeviceModuleId == module.Id)
-                        .CountAsync(ct);
+                    mc.SnapshotCounts.TryGetValue(module.Id, out int count);
 
-                    if (count >= MaxSnapshots)
+                    if (count >= MaxSnapshots &&
+                        mc.OldestSnapshots.TryGetValue(module.Id, out var oldest))
                     {
-                       
-                        var oldest = await _uow.DeviceModuleStatusSnapshots
-                            .Where(s => s.DeviceModuleId == module.Id)
-                            .OrderBy(s => s.CreateDate) 
-                            .FirstOrDefaultAsync(ct);
-
-                     
+                        // حلقه‌ی سقف‌دار: قدیمی‌ترین را بازنویسی کن
                         oldest.Status = newStatus;
                         oldest.StateJson = json;
                         oldest.Severity = 0;
                         oldest.ModifiedDate = now;
-                        oldest.CapturedAt = now;  
+                        oldest.CapturedAt = now;
                     }
                     else
                     {
                         var snapshot = DeviceModuleStatusSnapshot.Create(module.Id, newStatus, json, 0, now);
                         _uow.DeviceModuleStatusSnapshots.Add(snapshot);
+                        mc.SnapshotCounts[module.Id] = count + 1;
                     }
                 }
 
-           
                 currentStatus.Update(newStatus, json, 0);
             }
-            await TrackModuleFaultAsync(
-               atm, module.Id, moduleType, newStatus, deviceCode.Value, now, ct);
+
+            TrackModuleFault(atm, module.Id, moduleType, newStatus, deviceCode.Value, now, mc);
 
             return IsError(newStatus);
         }

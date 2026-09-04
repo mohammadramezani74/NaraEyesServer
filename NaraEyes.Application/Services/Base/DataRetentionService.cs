@@ -71,7 +71,7 @@ namespace NaraEyes.Application.Services.Base
                 WindowStart, WindowEnd);
 
             // مکث اولیه تا برنامه کامل بالا بیاید
-            try { await Task.Delay(TimeSpan.FromMinutes(2), ct); }
+            try { await Task.Delay(TimeSpan.FromSeconds(2), ct); }
             catch (OperationCanceledException) { return; }
 
             using var timer = new PeriodicTimer(
