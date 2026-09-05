@@ -3,6 +3,7 @@ using NaraEyes.Application.Contracts.Interfaces.Alarms;
 using NaraEyes.Application.Contracts.Interfaces.Base;
 using NaraEyes.Application.Contracts.Interfaces.Bulkoperations;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
+using NaraEyes.Application.Contracts.Interfaces.Hardware;
 using NaraEyes.Application.Contracts.Interfaces.Identity;
 using NaraEyes.Application.Contracts.Interfaces.Metrics;
 using NaraEyes.Application.Contracts.Interfaces.Modules;
@@ -11,6 +12,7 @@ using NaraEyes.Application.Services.Alarms;
 using NaraEyes.Application.Services.Base;
 using NaraEyes.Application.Services.Bulkoperations;
 using NaraEyes.Application.Services.Devices;
+using NaraEyes.Application.Services.Hardware;
 using NaraEyes.Application.Services.Identity;
 using NaraEyes.Application.Services.Metrics;
 using NaraEyes.Application.Services.Modules;
@@ -49,6 +51,7 @@ namespace NaraEyes.Application
             services.AddScoped<IDeviceAvailabilityReportService, DeviceAvailabilityReportService>();
             services.AddHostedService<ServerUptimeTracker>();
             services.AddScoped<IAlarmService, AlarmService>();
+            services.AddScoped<IHardwareProfileService, HardwareProfileService>();
             return services;
         }
     }

@@ -36,6 +36,8 @@ namespace NaraEyes.Application.Abstraction.Unitofwork
         public DbSet<ModuleFaultLog> ModuleFaultLogs { get; }
         DbSet<DeviceStateLog> DeviceStateLogs { get; }
         DbSet<ServerUptimeLog> ServerUptimeLogs { get; }
+        DbSet<DeviceHardwareProfile> DeviceHardwareProfiles { get; }
+        DbSet<DeviceHardwareChange> DeviceHardwareChanges { get; }
 
     }
 }

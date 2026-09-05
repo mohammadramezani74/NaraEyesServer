@@ -3,9 +3,11 @@ using Microsoft.Extensions.Logging;
 using NaraEyes.Application.Abstraction.QueueAbstraction;
 using NaraEyes.Application.Contracts.Interfaces.Base;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
+using NaraEyes.Application.Contracts.Interfaces.Hardware;
 using NaraEyes.Application.Contracts.Models.Basic;
 using NaraEyes.Application.Contracts.Models.Bulkoperations;
 using NaraEyes.Application.Contracts.Models.Devices;
+using NaraEyes.Application.Contracts.Models.Hardware;
 using NaraEyes.Application.Contracts.Utilities;
 using NaraEyes.Domain.Entities.Base;
 using NaraEyes.Domain.Enumerations;
@@ -32,9 +34,13 @@ namespace NaraEyes.Application.Services.Devices
         private readonly IDeviceSignalHub _signals;
         private readonly ILogger<DevicePollingService> _logger;
         private readonly ICommandDispatchState _dispatchState;
+        private readonly IHardwareProfileService _hardware;
         private readonly ConcurrentDictionary<string, ConcurrentQueue<OutBoxDeviceMessage>> _hot = new();
 
-        public DevicePollingService(IOutboxService outBoxService, IInboxService inBoxService, IDeviceService deviceService, ICommandAwaiter await, IAckAwaiter ackAwaiter, IInBoxBatchWriter inboxWriter, IHeartbeatThrottler heartbeat, IDeviceSignalHub signals, ILogger<DevicePollingService> logger, ICommandDispatchState dispatchState)
+        public DevicePollingService(IOutboxService outBoxService, IInboxService inBoxService, IDeviceService deviceService, ICommandAwaiter await
+            , IAckAwaiter ackAwaiter, IInBoxBatchWriter inboxWriter, IHeartbeatThrottler heartbeat,
+            IDeviceSignalHub signals, ILogger<DevicePollingService> logger, ICommandDispatchState dispatchState
+            , IHardwareProfileService hardware)
         {
             _outBoxService = outBoxService;
             _inBoxService = inBoxService;
@@ -46,6 +52,7 @@ namespace NaraEyes.Application.Services.Devices
             _signals = signals;
             _logger = logger;
             _dispatchState = dispatchState;
+            _hardware = hardware;
         }
         public async Task<PollResponse> PollAsync(string deviceIp, List<InBoxDeviceMessage>? reports, CancellationToken ct)
         {
@@ -151,6 +158,14 @@ namespace NaraEyes.Application.Services.Devices
                                 var bytes = string.IsNullOrEmpty(pl.DataBase64) ? null : Convert.FromBase64String(pl.DataBase64);
                                 await _outBoxService.MarkAutoJournalProccessor(msg.DeviceIp, bytes, ct);
                             }
+                            break;
+                        }
+                    case MessageType.HardwareProfile:
+                        {
+                            var pl = JsonSerializer.Deserialize<HardwareProfilePayload>(msg.Payload);
+                            if (pl is not null)
+                                await _hardware.ProcessAsync(msg.DeviceIp, pl, ct);
+
                             break;
                         }
                     case MessageType.CommandAck:

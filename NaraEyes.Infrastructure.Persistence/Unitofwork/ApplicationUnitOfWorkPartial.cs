@@ -38,5 +38,7 @@ namespace NaraEyes.Infrastructure.Persistence.Unitofwork
         public DbSet<ModuleFaultLog> ModuleFaultLogs => Context.Set<ModuleFaultLog>();
         public DbSet<DeviceStateLog> DeviceStateLogs => Context.Set<DeviceStateLog>();
         public DbSet<ServerUptimeLog> ServerUptimeLogs => Context.Set<ServerUptimeLog>();
+        public DbSet<DeviceHardwareProfile> DeviceHardwareProfiles => Context.Set<DeviceHardwareProfile>();
+        public DbSet<DeviceHardwareChange> DeviceHardwareChanges => Context.Set<DeviceHardwareChange>();
     }
 }
