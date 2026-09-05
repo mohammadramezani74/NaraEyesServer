@@ -52,6 +52,7 @@ namespace NaraEyes.Application
             services.AddHostedService<ServerUptimeTracker>();
             services.AddScoped<IAlarmService, AlarmService>();
             services.AddScoped<IHardwareProfileService, HardwareProfileService>();
+            services.AddScoped<IHardwareChangeReportService, HardwareChangeReportService>();
             return services;
         }
     }

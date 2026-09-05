@@ -1,0 +1,494 @@
+﻿@page "/reports/hardware-changes"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Models.Reports
+@using NaraEyes.Application.Services.Reports
+@using NaraEyes.Domain.Enumerations
+@inject IHardwareChangeReportService HardwareService
+@inject IBranchService BranchService
+@inject ISupervisionStateService SupervisionService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@attribute [Authorize(Roles = "مدیریت مرکزی,حراست مرکزی")]
+
+<PageTitle>گزارش تغییرات سخت‌افزاری</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+
+    @* ---------- سرصفحه ---------- *@
+    <div class="d-flex align-center mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="@(() => Nav.NavigateTo("/reports-hub"))"
+                       Title="بازگشت به مرکز گزارش‌ها" />
+        <MudIcon Icon="@Icons.Material.Filled.Memory" Color="Color.Primary"
+                 Size="Size.Large" Class="ms-2 me-2" />
+        <div>
+            <MudText Typo="Typo.h5">تغییرات سخت‌افزاری</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                تعویض یا تنزل حافظه، پردازنده، هارد و مادربرد
+            </MudText>
+        </div>
+    </div>
+
+    @* ---------- فیلترها ---------- *@
+    <ReportFilterBar Filter="_filter"
+                     Branches="_branches"
+                     Supervisions="_supervisions"
+                     OnApply="LoadAsync"
+                     IsLoading="_loading">
+        <ExtraFilters>
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="HardwareComponent ?" @bind-Value="_filter.Component"
+                           Label="قطعه" Dense="true" Clearable="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="HardwareComponent ?" Value="@((HardwareComponent?)null)">همه</MudSelectItem>
+                    <MudSelectItem T="HardwareComponent ?" Value="@((HardwareComponent?)HardwareComponent.Ram)">حافظه</MudSelectItem>
+                    <MudSelectItem T="HardwareComponent ?" Value="@((HardwareComponent?)HardwareComponent.Cpu)">پردازنده</MudSelectItem>
+                    <MudSelectItem T="HardwareComponent ?" Value="@((HardwareComponent?)HardwareComponent.Disk)">هارد دیسک</MudSelectItem>
+                    <MudSelectItem T="HardwareComponent ?" Value="@((HardwareComponent?)HardwareComponent.Motherboard)">مادربرد</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_filter.OnlyDowngrades"
+                           Color="Color.Error" Label="فقط تنزل‌ها" />
+            </MudItem>
+        </ExtraFilters>
+    </ReportFilterBar>
+
+    @* ---------- شاخص‌ها ---------- *@
+    @if (_result is not null)
+    {
+        <MudGrid Class="mt-2 mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">تنزل</MudText>
+                    <MudText Typo="Typo.h4"
+                             Color="@(_result.Downgrades > 0 ? Color.Error : Color.Success)">
+                        @_result.Downgrades
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                        قطعه با ظرفیت کمتر
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">تعویض هم‌سطح</MudText>
+                    <MudText Typo="Typo.h4">@_result.Replacements</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">ظرفیت یکسان</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">دستگاه‌های متأثر</MudText>
+                    <MudText Typo="Typo.h4">@_result.AffectedDevices</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">بدون پروفایل</MudText>
+                    <MudText Typo="Typo.h4"
+                             Color="@(_result.DevicesWithoutProfile > 0 ? Color.Warning : Color.Default)">
+                        @_result.DevicesWithoutProfile
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">دستگاه</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @if (_result.DevicesWithoutProfile > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                @_result.DevicesWithoutProfile دستگاه هنوز پروفایل سخت‌افزاری نفرستاده‌اند.
+                تا زمانی که پروفایل اولیه ثبت نشود، تغییرات آن دستگاه‌ها تشخیص داده نمی‌شود.
+            </MudAlert>
+        }
+    }
+
+    <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+
+        @* ================= تب ۱: تغییرات ================= *@
+        <MudTabPanel Text="تغییرات ثبت‌شده" Icon="@Icons.Material.Filled.SwapHoriz">
+
+            <div class="d-flex align-center mb-2">
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.TableView"
+                           Disabled="@(_exporting || _result is null)"
+                           OnClick="ExportAsync">
+                    @(_exporting ? "در حال ساخت…" : "خروجی اکسل")
+                </MudButton>
+            </div>
+
+            <MudTable T="HardwareChangeRow" Items="@Rows()" Dense="true" Hover="true"
+                      Striped="true" Loading="_loading" RowsPerPage="25"
+                      Elevation="0" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>
+                        <MudTableSortLabel SortBy="@(new Func<HardwareChangeRow, object>(x => x.DetectedAt))">
+                            تاریخ
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh>کد</MudTh>
+                    <MudTh>آی‌پی</MudTh>
+                    <MudTh>شعبه</MudTh>
+                    <MudTh>قطعه</MudTh>
+                    <MudTh>نوع</MudTh>
+                    <MudTh>قبلی</MudTh>
+                    <MudTh>جدید</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="تاریخ">@context.DetectedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
+                    <MudTd DataLabel="کد">@(context.DeviceCode?.ToString() ?? "—")</MudTd>
+                    <MudTd DataLabel="آی‌پی">@context.DeviceIp</MudTd>
+                    <MudTd DataLabel="شعبه">@(context.BranchName ?? "—")</MudTd>
+                    <MudTd DataLabel="قطعه">@context.ComponentFa</MudTd>
+                    <MudTd DataLabel="نوع">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@KindColor(context.Kind)">
+                            @context.KindFa
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="قبلی">@(context.OldValue ?? "—")</MudTd>
+                    <MudTd DataLabel="جدید">@(context.NewValue ?? "—")</MudTd>
+                </RowTemplate>
+
+                <NoRecordsContent>
+                    <MudText Class="pa-4">تغییری در این بازه ثبت نشده است.</MudText>
+                </NoRecordsContent>
+
+                <PagerContent>
+                    <MudTablePager RowsPerPageString="تعداد در صفحه" InfoFormat="@_pagerInfoFormat" />
+                </PagerContent>
+            </MudTable>
+
+        </MudTabPanel>
+
+        @* ================= تب ۲: پروفایل ناوگان ================= *@
+        <MudTabPanel Text="پروفایل فعلی ناوگان" Icon="@Icons.Material.Filled.Dns">
+
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                مبنای مقایسه از اولین اجرای ایجنت گرفته می‌شود، پس تعویض‌هایی که
+                <strong>پیش از نصب سامانه</strong> انجام شده‌اند آلارم نمی‌دهند.
+                این جدول تنها راه پیدا کردنشان است: دستگاهی که مشخصاتش با اکثریت
+                ناوگان فرق دارد، احتمالاً قبلاً دستکاری شده. این یک قرینه است،
+                نه اثبات — پیش از هر اقدامی با فاکتور خرید تطبیق داده شود.
+            </MudAlert>
+
+            <div class="d-flex align-center flex-wrap mb-3">
+                <MudTextField T="string" @bind-Value="_fleetSearch" Immediate="true"
+                              Placeholder="جستجوی آی‌پی، کد یا شعبه…"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Class="me-3 mb-2" Style="max-width:320px" />
+
+                <MudSwitch T="bool" @bind-Value="_onlyOutliers" Color="Color.Warning"
+                           Label="فقط متفاوت با اکثریت" Class="mb-2" />
+
+                <MudSpacer />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.TableView"
+                           Disabled="@(_exportingFleet || _result is null)"
+                           OnClick="ExportFleetAsync" Class="mb-2">
+                    @(_exportingFleet ? "در حال ساخت…" : "خروجی اکسل")
+                </MudButton>
+            </div>
+
+            @* --- خلاصه‌ی ترکیب‌ها --- *@
+            @if (_result is not null && _result.FleetProfiles.Count > 1)
+            {
+                <MudPaper Class="pa-3 mb-4" Elevation="0" Outlined="true">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        ترکیب‌های موجود در ناوگان
+                    </MudText>
+
+                    <MudSimpleTable Dense="true" Hover="true" Striped="true" Elevation="0">
+                        <thead>
+                            <tr>
+                                <th>حافظه</th>
+                                <th>پردازنده</th>
+                                <th>هارد</th>
+                                <th>مادربرد</th>
+                                <th>تعداد</th>
+                                <th>وضعیت</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var g in _result.FleetProfiles)
+                            {
+                                <tr>
+                                    <td>@g.RamFa</td>
+                                    <td>@(g.CpuName ?? "—")</td>
+                                    <td>@g.DiskFa</td>
+                                    <td>@(g.BoardProduct ?? "—")</td>
+                                    <td>@g.DeviceCount</td>
+                                    <td>
+                                        @if (g.IsMajority)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success"
+                                                     Variant="Variant.Outlined">اکثریت</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                                     Variant="Variant.Filled">متفاوت</MudChip>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            }
+
+            @* --- جدول تخت دستگاه‌ها --- *@
+            @*
+                عمداً جدول تخت است نه سطرهای بازشونده. کاربر معمولاً دنبال
+                «این دستگاه چه مشخصاتی دارد» می‌گردد، نه «چند نوع پیکربندی
+                داریم». جدول تخت قابل جستجو و مرتب‌سازی است و مثل خروجی
+                اکسل رفتار می‌کند.
+            *@
+            <MudTable T="FleetDeviceRow" Items="@FleetDeviceRows()" Dense="true" Hover="true"
+                      Striped="true" Loading="_loading" RowsPerPage="50"
+                      Elevation="0" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>
+                        <MudTableSortLabel SortBy="@(new Func<FleetDeviceRow, object>(x => x.Code ?? 0))">
+                            کد
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh>
+                        <MudTableSortLabel SortBy="@(new Func<FleetDeviceRow, object>(x => x.Ip))">
+                            آی‌پی
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh>شعبه</MudTh>
+                    <MudTh>
+                        <MudTableSortLabel SortBy="@(new Func<FleetDeviceRow, object>(x => x.RamTotalMb))">
+                            حافظه
+                        </MudTableSortLabel>
+                    </MudTh>
+                    <MudTh>پردازنده</MudTh>
+                    <MudTh>هسته</MudTh>
+                    <MudTh>هارد</MudTh>
+                    <MudTh>مادربرد</MudTh>
+                    <MudTh>وضعیت</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="کد">@(context.Code?.ToString() ?? "—")</MudTd>
+                    <MudTd DataLabel="آی‌پی">@context.Ip</MudTd>
+                    <MudTd DataLabel="شعبه">@(context.BranchName ?? "—")</MudTd>
+                    <MudTd DataLabel="حافظه">@context.RamFa</MudTd>
+                    <MudTd DataLabel="پردازنده">@(context.CpuName ?? "—")</MudTd>
+                    <MudTd DataLabel="هسته">@context.CpuCores</MudTd>
+                    <MudTd DataLabel="هارد">@context.DiskFa</MudTd>
+                    <MudTd DataLabel="مادربرد">@(context.BoardProduct ?? "—")</MudTd>
+                    <MudTd DataLabel="وضعیت">
+                        @if (context.IsMajority)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success"
+                                     Variant="Variant.Outlined">اکثریت</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                     Variant="Variant.Filled">متفاوت</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+
+                <NoRecordsContent>
+                    <MudText Class="pa-4">هنوز پروفایلی ثبت نشده است.</MudText>
+                </NoRecordsContent>
+
+                <PagerContent>
+                    <MudTablePager RowsPerPageString="تعداد در صفحه" InfoFormat="@_pagerInfoFormat" />
+                </PagerContent>
+            </MudTable>
+
+        </MudTabPanel>
+    </MudTabs>
+
+</MudContainer>
+
+@code {
+    private readonly HardwareChangeFilter _filter = new();
+    private HardwareChangeResult? _result;
+
+    private List<BranchesViewModel> _branches = new();
+    private List<SupervisionStateViewModel> _supervisions = new();
+
+    private bool _loading;
+    private bool _exporting;
+
+    // ---- فیلترهای تب دوم (فقط سمت کلاینت) ----
+    private string _fleetSearch = "";
+    private bool _onlyOutliers;
+
+    private readonly string _pagerInfoFormat = "{first_item}-{last_item} از {all_items}";
+    private readonly CancellationTokenSource _cts = new();
+    private bool _exportingFleet;
+
+    private async Task ExportFleetAsync()
+    {
+        _exportingFleet = true;
+        try
+        {
+            var bytes = await HardwareService.ExportFleetExcelAsync(
+                _filter, _onlyOutliers, _fleetSearch, _cts.Token);
+
+            const string mime =
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"fleet_profile_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+
+            await JS.InvokeVoidAsync("downloadBase64File",
+                mime, Convert.ToBase64String(bytes), fileName);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در ساخت اکسل: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _exportingFleet = false;
+        }
+    }
+    /// <summary>
+    /// سطر تخت — گروه و دستگاه با هم، تا جدول قابل جستجو و مرتب‌سازی باشد.
+    /// </summary>
+    private sealed class FleetDeviceRow
+    {
+        public string Ip { get; set; } = "";
+        public int? Code { get; set; }
+        public string? BranchName { get; set; }
+
+        public int RamTotalMb { get; set; }
+        public string? CpuName { get; set; }
+        public int CpuCores { get; set; }
+        public long DiskSizeBytes { get; set; }
+        public string? BoardProduct { get; set; }
+
+        public bool IsMajority { get; set; }
+
+        public string RamFa => (RamTotalMb / 1024.0).ToString("0.##") + " گیگابایت";
+        public string DiskFa => (DiskSizeBytes / 1000.0 / 1000.0 / 1000.0).ToString("0") + " گیگابایت";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await BranchService.GetAllBranches(_cts.Token);
+            _supervisions = await SupervisionService.GetSupervisionStates(_cts.Token);
+        }
+        catch
+        {
+            // نبود لیست فیلترها نباید مانع باز شدن صفحه شود
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _result = await HardwareService.GetAsync(_filter, _cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت گزارش: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private IEnumerable<HardwareChangeRow> Rows()
+        => _result?.Rows ?? Enumerable.Empty<HardwareChangeRow>();
+
+    private IEnumerable<FleetDeviceRow> FleetDeviceRows()
+    {
+        if (_result is null) return Enumerable.Empty<FleetDeviceRow>();
+
+        var flat = _result.FleetProfiles.SelectMany(g => g.Devices.Select(d => new FleetDeviceRow
+        {
+            Ip = d.Ip,
+            Code = d.Code,
+            BranchName = d.BranchName,
+            RamTotalMb = g.RamTotalMb,
+            CpuName = g.CpuName,
+            CpuCores = g.CpuCores,
+            DiskSizeBytes = g.DiskSizeBytes,
+            BoardProduct = g.BoardProduct,
+            IsMajority = g.IsMajority,
+        }));
+
+        if (_onlyOutliers)
+            flat = flat.Where(x => !x.IsMajority);
+
+        if (!string.IsNullOrWhiteSpace(_fleetSearch))
+        {
+            var s = _fleetSearch.Trim();
+            flat = flat.Where(x =>
+                x.Ip.Contains(s, StringComparison.OrdinalIgnoreCase)
+                || (x.Code is not null && x.Code.ToString()!.Contains(s))
+                || (x.BranchName is not null && x.BranchName.Contains(s, StringComparison.OrdinalIgnoreCase))
+                || (x.CpuName is not null && x.CpuName.Contains(s, StringComparison.OrdinalIgnoreCase))
+                || (x.BoardProduct is not null && x.BoardProduct.Contains(s, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        // متفاوت‌ها اول، چون همان چیزی است که کاربر دنبالش است
+        return flat.OrderBy(x => x.IsMajority ? 1 : 0).ThenBy(x => x.Ip);
+    }
+
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var bytes = await HardwareService.ExportExcelAsync(_filter, _cts.Token);
+
+            const string mime =
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"hardware_changes_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+
+            await JS.InvokeVoidAsync("downloadBase64File",
+                mime, Convert.ToBase64String(bytes), fileName);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در ساخت اکسل: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    // ⚠️ با if نوشته شده نه switch با الگوی رابطه‌ای — در .razor یک <
+    // داخل الگو باعث می‌شود parser آن را تگ ببیند.
+    private static Color KindColor(HardwareChangeKind k)
+    {
+        if (k == HardwareChangeKind.Downgrade) return Color.Error;
+        if (k == HardwareChangeKind.Replaced) return Color.Warning;
+        return Color.Info;
+    }
+}

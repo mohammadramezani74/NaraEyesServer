@@ -69,7 +69,7 @@ namespace NaraEyes.WebApplication.Common
                 Route:         "/reports/hardware-changes",
                 Category:      CatHardware,
                 Roles:         new[] { RoleCentral, RoleSecurity },
-                IsReady:       false),
+                IsReady:       true),
 
             // ================= عملیات =================
 
