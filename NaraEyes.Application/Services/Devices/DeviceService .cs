@@ -663,7 +663,53 @@ usage=x.CurrentMetrics.CpuUsage??0,
             var bytes = await _await.WaitForBytesAsync(cmd.Id, JournalTimeout, ct);
             return (bytes is { Length: > 0 }) ? bytes : null;
         }
+        /// <summary>
+        /// نسخه‌ی عمومی‌شده‌ی RequestJournalAsync با انتخاب منبع.
+        ///
+        /// تاریخ‌ها همیشه **میلادی** yyyyMMdd فرستاده می‌شوند؛ تبدیل به
+        /// تقویم هر منبع (تصاویر شمسی است) روی خود دستگاه انجام می‌شود.
+        /// دلیل: فقط ایجنت می‌داند نام‌گذاری هر پوشه با چه تقویمی است، و
+        /// اگر بعداً منبعی با تقویم دیگر اضافه شد، سرور دست‌نخورده می‌ماند.
+        /// </summary>
+        public async Task<byte[]?> RequestDeviceFilesAsync(
+            string deviceIp,
+            Domain.Enumerations.FileSourceType source,
+            DateTime startLocal,
+            DateTime endLocal,
+            CancellationToken ct = default)
+        {
+            if (endLocal < startLocal) (startLocal, endLocal) = (endLocal, startLocal);
 
+            var startDay = startLocal.Date;
+            var endDay = endLocal.Date;
+
+            var id = Guid.NewGuid();
+            var cmd = new OutBoxDeviceMessage
+            {
+                Id = id,
+                DeviceIp = deviceIp,
+                StartDate = startDay.ToString("yyyyMMdd", _gregorian),
+                EndDate = endDay.ToString("yyyyMMdd", _gregorian),
+                CommandType = Domain.Enumerations.CommandType.EJournal,
+                Payload = JsonSerializer.Serialize(new
+                {
+                    CommandId = id,
+                    Source = (int)source,
+                })
+            };
+
+            await _outbox.EnqueueCommandAsync(cmd, ct);
+            _dispatchState.MarkCommandEnqueued(deviceIp);
+
+            // تصاویر می‌توانند خیلی بزرگ‌تر از ژورنال باشند؛ زمان بیشتری
+            // برای زیپ شدن روی دستگاه لازم است.
+            var timeout = source == Domain.Enumerations.FileSourceType.ArmaghanImages
+                ? JournalTimeout + TimeSpan.FromSeconds(60)
+                : JournalTimeout;
+
+            var bytes = await _await.WaitForBytesAsync(cmd.Id, timeout, ct);
+            return (bytes is { Length: > 0 }) ? bytes : null;
+        }
         private static CultureInfo CreateGregorian()
         {
             var ci = (CultureInfo)CultureInfo.InvariantCulture.Clone();

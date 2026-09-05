@@ -11,6 +11,7 @@
 @using NaraEyes.Domain.Enumerations            
 @using NaraEyes.WebApplication.Common
 @using NaraEyes.WebApplication.Components.Dialogs
+@using NaraEyes.Domain.Enumerations
 @using static NaraEyes.WebApplication.Components.Dialogs.FileUploadDialog
 @using NaraEyes.Domain.Enumerations
 @inject ISnackbar Snackbar
@@ -181,9 +182,12 @@
                     <MudMenuItem OnClick="@(() => Screenshot(context))">
                         <MudIcon Icon="@Icons.Material.Filled.PhotoCamera" Class="mr-2" /> اسکرین‌شات
                     </MudMenuItem>
-                    <MudMenuItem OnClick="@(() => DownloadJournal(context))">
-                        <MudIcon Icon="@Icons.Material.Filled.SystemUpdateAlt" Class="mr-2" /> دانلود ژورنال
-                    </MudMenuItem>
+                        <MudMenuItem OnClick="@(() => DownloadDeviceFiles(context))">
+                            <MudIcon Icon="@Icons.Material.Filled.SystemUpdateAlt" Class="mr-2" /> دانلود ژورنال
+                        </MudMenuItem>
+                        <MudMenuItem OnClick="@(() => DownloadImages(context))">
+                            <MudIcon Icon="@Icons.Material.Filled.PhotoLibrary" Class="mr-2" /> دریافت تصاویر
+                        </MudMenuItem>
                     <MudMenuItem OnClick="@(() => Reboot(context))">
                         <MudIcon Icon="@Icons.Material.Filled.RestartAlt" Class="mr-2" /> ریستارت
                     </MudMenuItem>
@@ -530,11 +534,95 @@
             });
     }
 
-    private async Task DownloadJournal(DeviceViewModel d)
+    // private async Task DownloadJournal(DeviceViewModel d)
+    // {
+    //     if (!EnsureOnline(d)) return;
+    //     var dialog = DialogService.Show<JournalRangeDialog>("دانلود ژورنال",
+    //         new DialogParameters(),
+    //         new DialogOptions
+    //         {
+    //             CloseOnEscapeKey = true,
+    //             MaxWidth = MaxWidth.Small,
+    //             FullWidth = true,
+    //             Position = DialogPosition.Center
+    //         });
+
+    //     var result = await dialog.Result;
+    //     if (result.Canceled) return;
+
+    //     var range = (DateRange)result.Data!;
+    //     var start = range.Start!.Value.Date;
+    //     var end = range.End!.Value.Date.AddDays(1).AddTicks(-1);
+
+    //     var bytes = await _ops.RunAsync(
+    //         operationKey: $"journal:{d.Ip}",
+    //         title: "دریافت ژورنال",
+    //         work: ct => DeviceService.RequestJournalAsync(d.Ip, start, end, ct),
+    //         ct: _cancellationTokenSource!.Token,
+    //         emptyMessage: "ژورنالی در این بازه یافت نشد.",
+    //         isEmpty: b => b is null || b.Length == 0);
+
+    //     if (bytes is null || bytes.Length == 0) return;
+
+    //     var safeIp = (d.Ip ?? "device").Replace('.', '_').Replace(':', '_');
+    //     var name = $"journal_{safeIp}_{start:yyyyMMdd}-{end:yyyyMMdd}";
+
+    //     if (LooksLikeZip(bytes))
+    //     {
+    //         await SaveFileAsync(bytes, name + ".zip", "application/zip");
+    //     }
+    //     else
+    //     {
+    //         await SaveFileAsync(bytes, name + ".txt", "text/plain");
+    //         Snackbar.Add("فایل دریافتی زیپ نبود؛ به‌صورت متن ذخیره شد.", Severity.Info);
+    //     }
+
+    //     Snackbar.Add("دانلود ژورنال آماده شد.", Severity.Success);
+    // }
+    private Task DownloadDeviceFiles(DeviceViewModel d)
+    => FetchFilesAsync(
+        d,
+        showSourcePicker: true,
+        source: FileSourceType.ArmaghanJournal,
+        dialogTitle: "دانلود ژورنال",
+        maxDays: 31,
+        hint: "ژورنال ارمغان شامل فایل زندهٔ امروز هم می‌شود. لاگ سپنتا فقط آرشیوهای بسته‌شده را دارد.",
+        filePrefix: "journal");
+
+    private Task DownloadImages(DeviceViewModel d)
+        => FetchFilesAsync(
+            d,
+            showSourcePicker: false,
+            source: FileSourceType.ArmaghanImages,
+            dialogTitle: "دریافت تصاویر",
+            maxDays: 7,
+            hint: "پوشه‌های تصویر حجیم‌اند. بازهٔ کوتاه انتخاب کنید؛ سقف انتقال ۴۰ مگابایت است.",
+            filePrefix: "images");
+
+    /// <summary>
+    /// مسیر مشترک هر سه منبع. تفاوت‌ها فقط پارامترند، نه کد جدید —
+    /// افزودن منبع چهارم یعنی یک متد سه‌خطی مثل بالا.
+    /// </summary>
+    private async Task FetchFilesAsync(
+        DeviceViewModel d,
+        bool showSourcePicker,
+        FileSourceType source,
+        string dialogTitle,
+        int maxDays,
+        string hint,
+        string filePrefix)
     {
         if (!EnsureOnline(d)) return;
-        var dialog = DialogService.Show<JournalRangeDialog>("دانلود ژورنال",
-            new DialogParameters(),
+
+        var parameters = new DialogParameters
+        {
+            { nameof(FileRangeDialog.ShowSourcePicker), showSourcePicker },
+            { nameof(FileRangeDialog.Source),           source },
+            { nameof(FileRangeDialog.MaxDays),          maxDays },
+            { nameof(FileRangeDialog.HintText),         hint },
+        };
+
+        var dialog = DialogService.Show<FileRangeDialog>(dialogTitle, parameters,
             new DialogOptions
             {
                 CloseOnEscapeKey = true,
@@ -546,34 +634,35 @@
         var result = await dialog.Result;
         if (result.Canceled) return;
 
-        var range = (DateRange)result.Data!;
-        var start = range.Start!.Value.Date;
-        var end = range.End!.Value.Date.AddDays(1).AddTicks(-1);
+        var sel = (FileRangeDialog.Selection)result.Data!;
 
         var bytes = await _ops.RunAsync(
-            operationKey: $"journal:{d.Ip}",
-            title: "دریافت ژورنال",
-            work: ct => DeviceService.RequestJournalAsync(d.Ip, start, end, ct),
+            operationKey: $"files:{sel.Source}:{d.Ip}",
+            title: dialogTitle,
+            work: ct => DeviceService.RequestDeviceFilesAsync(d.Ip, sel.Source, sel.Start, sel.End, ct),
             ct: _cancellationTokenSource!.Token,
-            emptyMessage: "ژورنالی در این بازه یافت نشد.",
+            emptyMessage: "فایلی در این بازه یافت نشد.",
             isEmpty: b => b is null || b.Length == 0);
 
         if (bytes is null || bytes.Length == 0) return;
 
         var safeIp = (d.Ip ?? "device").Replace('.', '_').Replace(':', '_');
-        var name = $"journal_{safeIp}_{start:yyyyMMdd}-{end:yyyyMMdd}";
+        var name = $"{filePrefix}_{safeIp}_{sel.Start:yyyyMMdd}-{sel.End:yyyyMMdd}";
 
         if (LooksLikeZip(bytes))
         {
             await SaveFileAsync(bytes, name + ".zip", "application/zip");
+            Snackbar.Add("فایل آماده شد.", Severity.Success);
         }
         else
         {
+            // ایجنت وقتی چیزی پیدا نکند یا حجم از سقف بگذرد، یک فایل متنی
+            // فارسی با توضیح برمی‌گرداند. این را به‌عنوان «خطای موفق»
+            // نمایش می‌دهیم، نه دانلود عادی.
             await SaveFileAsync(bytes, name + ".txt", "text/plain");
-            Snackbar.Add("فایل دریافتی زیپ نبود؛ به‌صورت متن ذخیره شد.", Severity.Info);
+            Snackbar.Add("دستگاه به‌جای فایل، توضیح متنی برگرداند. فایل txt را باز کنید.",
+                         Severity.Warning);
         }
-
-        Snackbar.Add("دانلود ژورنال آماده شد.", Severity.Success);
     }
     private Task Reboot(DeviceViewModel d) => _ops.RunAsync(
         operationKey: $"reboot:{d.Ip}",

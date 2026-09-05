@@ -1,0 +1,118 @@
+﻿@using NaraEyes.Domain.Enumerations
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+
+            @if (ShowSourcePicker)
+            {
+                <MudSelect T="FileSourceType"
+                           Label="منبع"
+                           @bind-Value="_source"
+                           Dense="true"
+                           Variant="Variant.Outlined">
+                    <MudSelectItem Value="@FileSourceType.ArmaghanJournal">ژورنال ارمغان</MudSelectItem>
+                    <MudSelectItem Value="@FileSourceType.SepantaLog">لاگ سپنتا</MudSelectItem>
+                </MudSelect>
+            }
+
+            <MudDateRangePicker Label="بازهٔ تاریخ"
+                                @bind-DateRange="_range"
+                                DateFormat="yyyy/MM/dd"
+                                TitleDateFormat="dddd, dd MMMM yyyy"
+                                StartMonth="@DateTime.Now.AddMonths(-1)"
+                                Editable="true"
+                                Clearable="true" />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @HintText
+            </MudText>
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">@_error</MudAlert>
+            }
+
+        </MudStack>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="@Cancel">انصراف</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@Ok">دریافت</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>
+    /// وقتی false باشد، منبع ثابت است و کاربر انتخابی ندارد — برای
+    /// «دریافت تصاویر» که فقط یک منبع دارد.
+    /// </summary>
+    [Parameter] public bool ShowSourcePicker { get; set; } = true;
+
+    /// <summary>منبع پیش‌فرض / ثابت</summary>
+    [Parameter] public FileSourceType Source { get; set; } = FileSourceType.ArmaghanJournal;
+
+    /// <summary>حداکثر طول بازه به روز</summary>
+    [Parameter] public int MaxDays { get; set; } = 31;
+
+    [Parameter]
+    public string HintText { get; set; } =
+        "تاریخ‌ها میلادی وارد می‌شوند و روی دستگاه به تقویم مناسب هر منبع تبدیل می‌شوند.";
+
+    private FileSourceType _source;
+    private DateRange _range = new(DateTime.Now.Date, DateTime.Now.Date);
+    private string? _error;
+
+    /// <summary>خروجی دیالوگ</summary>
+    public sealed class Selection
+    {
+        public FileSourceType Source { get; set; }
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+    }
+
+    protected override void OnInitialized()
+    {
+        _source = Source;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Ok()
+    {
+        _error = null;
+
+        if (_range.Start is null || _range.End is null)
+        {
+            _error = "لطفاً تاریخ شروع و پایان را انتخاب کنید.";
+            return;
+        }
+
+        if (_range.End < _range.Start)
+        {
+            _error = "تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.";
+            return;
+        }
+
+        if (_range.Start > DateTime.Now || _range.End > DateTime.Now.AddMinutes(1))
+        {
+            _error = "تاریخ‌های آینده مجاز نیست.";
+            return;
+        }
+
+        if ((_range.End.Value - _range.Start.Value).TotalDays > MaxDays)
+        {
+            _error = $"حداکثر بازهٔ قابل دریافت {MaxDays} روز است.";
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(new Selection
+        {
+            Source = ShowSourcePicker ? _source : Source,
+            Start = _range.Start.Value.Date,
+            End = _range.End.Value.Date,
+        }));
+    }
+}

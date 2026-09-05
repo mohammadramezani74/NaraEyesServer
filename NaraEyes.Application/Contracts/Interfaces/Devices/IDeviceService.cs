@@ -54,6 +54,17 @@ namespace NaraEyes.Application.Contracts.Interfaces.Devices
         Task<bool> RestartOrShutdownDevice(bool isrestart,string deviceIp, CancellationToken cancellationToken = default);
         Task<DeviceMetricsViewModel>GetMetricsAsync(string deviceIp, CancellationToken cancellationToken = default);
         Task<byte[]?> RequestJournalAsync(string deviceIp, DateTime startLocal, DateTime endLocal, CancellationToken ct = default);
+        /// <summary>
+        /// دریافت فایل از یک منبع مشخص روی دستگاه (ژورنال ارمغان، لاگ سپنتا،
+        /// تصاویر). RequestJournalAsync دست‌نخورده می‌ماند چون Report.razor
+        /// هنوز از آن استفاده می‌کند.
+        /// </summary>
+        Task<byte[]?> RequestDeviceFilesAsync(
+            string deviceIp,
+            Domain.Enumerations.FileSourceType source,
+            DateTime startLocal,
+            DateTime endLocal,
+            CancellationToken ct = default);
         Task<bool> RequestResetCdmAsync(string deviceIp, CancellationToken ct = default);
         Task<bool> RequestResetPtrAsync(string deviceIp, CancellationToken ct = default);
         Task<bool> RequestResetIdcAsync(string deviceIp, CancellationToken ct = default);
