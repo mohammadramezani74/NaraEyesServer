@@ -26,6 +26,7 @@
                     <MudIconButton OnClick="@((e) => OpenDrwer())" Color="Color.Inherit" Edge="Edge.Start" Icon="@Icons.Material.Filled.Menu"></MudIconButton>
                     <MudText Typo="Typo.h5" Class="ml-3">مانیتورینگ</MudText>
                     <MudSpacer />
+                    <AlarmBell />
                     <MudIconButton @onclick="ChangePassword" Icon="@Icons.Material.Filled.LockReset" Color="Color.Inherit" title="تغییر رمز عبور"></MudIconButton>
                     <form action="/Account/logout" method="post" class="m-0 p-0">
                         <AntiforgeryToken />

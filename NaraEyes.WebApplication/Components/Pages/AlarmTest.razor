@@ -1,0 +1,57 @@
+﻿@page "/alarm-test"
+@using NaraEyes.Application.Abstraction.Unitofwork
+@using NaraEyes.Application.Contracts.Interfaces.Alarms
+@using NaraEyes.Application.Contracts.Models.Alarms
+@using NaraEyes.Domain.Enumerations
+@using Microsoft.EntityFrameworkCore
+@inject IAlarmService Alarms
+@inject IApplicationUnitOfWork Uow
+@inject ISnackbar Snackbar
+
+<MudContainer Class="pa-6">
+    <MudText Typo="Typo.h6" Class="mb-4">تست آلارم</MudText>
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Error"
+                   OnClick="@(() => Fire(EventSeverity.Critical, AlarmCodes.HardwareDowngrade,
+                                                            "حافظه از ۴ گیگابایت به ۲ گیگابایت کاهش یافت"))">
+            بحرانی
+        </MudButton>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                   OnClick="@(() => Fire(EventSeverity.Warning, AlarmCodes.HardwareChanged,
+                                                            "هارد دیسک تعویض شد — سریال متفاوت"))">
+            هشدار
+        </MudButton>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Info"
+                   OnClick="@(() => Fire(EventSeverity.Info, AlarmCodes.HardwareBaseline,
+                                                            "پروفایل سخت‌افزار برای اولین بار ثبت شد"))">
+            اطلاعی
+        </MudButton>
+    </MudStack>
+
+    <MudText Typo="Typo.body2" Class="mt-4">@_log</MudText>
+</MudContainer>
+
+@code {
+    private string _log = "";
+
+    private async Task Fire(EventSeverity sev, string code, string msg)
+    {
+        var deviceId = await Uow.Devices.AsNoTracking()
+            .Select(d => d.Id).FirstOrDefaultAsync();
+
+        if (deviceId == Guid.Empty)
+        {
+            _log = "هیچ دستگاهی در دیتابیس نیست.";
+            return;
+        }
+
+        var id = await Alarms.RaiseAsync(deviceId, DeviceModuleType.System, sev, code, msg);
+
+        _log = id is null
+            ? $"سرکوب شد — آلارم تأییدنشده‌ای با کد {code} از قبل وجود دارد."
+            : $"ثبت شد: {id}";
+    }
+}

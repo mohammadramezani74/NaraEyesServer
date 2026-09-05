@@ -1,0 +1,265 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using NaraEyes.Application.Contracts.Interfaces.Alarms
+@using NaraEyes.Application.Contracts.Models.Alarms
+@using NaraEyes.Domain.Enumerations
+@implements IAsyncDisposable
+@inject IAlarmService AlarmService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceScopeFactory ScopeFactory
+
+<MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft"
+         Dense="true" ListClass="alarm-menu">
+    <ActivatorContent>
+        <MudBadge Content="@_counts.Unacknowledged"
+                  Color="@BadgeColor()"
+                  Overlap="true"
+                  Visible="@(_counts.Unacknowledged > 0)"
+                  Max="99">
+            <MudIconButton Icon="@Icons.Material.Filled.NotificationsNone"
+                           Color="Color.Inherit"
+                           Title="آلارم‌ها" />
+        </MudBadge>
+    </ActivatorContent>
+
+    <ChildContent>
+        <div class="alarm-header">
+            <MudText Typo="Typo.subtitle2">آلارم‌های تأییدنشده</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @if (_counts.Unacknowledged == 0)
+                {
+                    @("موردی نیست")
+                }
+                else
+                {
+                    @($"{_counts.Unacknowledged} مورد")
+                }
+            </MudText>
+        </div>
+
+        <MudDivider />
+
+        @if (_recent.Count == 0)
+        {
+            <div class="alarm-empty">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    آلارم تأییدنشده‌ای وجود ندارد.
+                </MudText>
+            </div>
+        }
+        else
+        {
+            @foreach (var a in _recent)
+            {
+                <div class="alarm-item">
+                    <MudIcon Icon="@SeverityIcon(a.Severity)"
+                             Color="@SeverityColor(a.Severity)"
+                             Size="Size.Small"
+                             Class="alarm-item-icon" />
+
+                    <div class="alarm-item-body">
+                        <MudText Typo="Typo.body2">@a.Message</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @a.DeviceIp
+                            @if (!string.IsNullOrWhiteSpace(a.BranchName))
+                            {
+                                @($" — {a.BranchName}")
+                            }
+                            @($" — {a.EventTime:MM/dd HH:mm}")
+                        </MudText>
+                    </div>
+
+                    <MudIconButton Icon="@Icons.Material.Filled.Check"
+                                   Size="Size.Small"
+                                   Title="تأیید"
+                                   OnClick="@(() => AckAsync(a.Id))" />
+                </div>
+
+                <MudDivider />
+            }
+        }
+
+        <div class="alarm-footer">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" FullWidth="true"
+                       OnClick="@(() => Nav.NavigateTo("/alarms"))">
+                مشاهده‌ی همه
+            </MudButton>
+        </div>
+    </ChildContent>
+</MudMenu>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private AlarmCounts _counts = new();
+    private List<AlarmRow> _recent = new();
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private HubConnection? _hub;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        await ConnectAsync();
+    }
+
+    private async Task ConnectAsync()
+    {
+        try
+        {
+            _hub = new HubConnectionBuilder()
+                .WithUrl(Nav.ToAbsoluteUri("/deviceHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // آلارم جدید: به‌جای اعتماد به محتوای پیام، از سرور رفرش
+            // می‌گیریم تا هر فیلتری که سمت سرور اعمال می‌شود رعایت شود.
+            _hub.On<AlarmNotification>("ReceiveAlarm", async n =>
+            {
+                await RefreshAsync();
+
+                // فقط بحرانی‌ها توست می‌گیرند. اگر هر آلارمی پنجره باز
+                // کند، کاربر ظرف یک هفته یاد می‌گیرد سریع ببنددشان.
+                if (n.Severity == EventSeverity.Critical)
+                {
+                    Snackbar.Add(n.Message, Severity.Error, cfg =>
+                    {
+                        cfg.RequireInteraction = true;
+                        cfg.ShowCloseIcon = true;
+                    });
+                }
+
+                await InvokeAsync(StateHasChanged);
+            });
+
+            _hub.On<Guid>("AlarmAcknowledged", async _ =>
+            {
+                await RefreshAsync();
+                await InvokeAsync(StateHasChanged);
+            });
+
+            _hub.On("AlarmsRefreshed", async () =>
+            {
+                await RefreshAsync();
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await _hub.StartAsync(_cts.Token);
+        }
+        catch
+        {
+            // بدون SignalR، زنگوله فقط در بارگذاری صفحه به‌روز می‌شود.
+            // این افت کیفیت است، نه خرابی — صفحه باید کار کند.
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        // زنگوله در نوار بالاست، یعنی همیشه همزمان با یک صفحه‌ی دیگر
+        // زنده است. در Blazor Server همه‌ی کامپوننت‌های یک circuit یک
+        // DbContext مشترک دارند، پس اگر از سرویس تزریق‌شده استفاده کنیم،
+        // رفرشِ ناشی از SignalR با کوئری آن صفحه تصادم می‌کند.
+        //
+        // اسکوپ مستقل یعنی DbContext مستقل.
+        if (!await _gate.WaitAsync(0)) return;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAlarmService>();
+
+            _counts = await svc.GetCountsAsync(_cts.Token);
+
+            var list = await svc.GetAsync(new AlarmFilter
+            {
+                Acknowledged = false,
+                Take = 10,
+            }, _cts.Token);
+
+            // Info آلارم نیست — HW-BASELINE نباید در لیست بیاید
+            _recent = list.Where(x => x.Severity != EventSeverity.Info).ToList();
+        }
+        catch (OperationCanceledException) { }
+        catch
+        {
+            // خطای موقت نباید نوار بالای برنامه را بشکند
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task AckAsync(Guid id)
+    {
+        var userId = await CurrentUserIdAsync();
+        if (userId is null)
+        {
+            Snackbar.Add("شناسه‌ی کاربر یافت نشد.", Severity.Warning);
+            return;
+        }
+
+        using (var scope = ScopeFactory.CreateScope())
+        {
+            var svc = scope.ServiceProvider.GetRequiredService<IAlarmService>();
+            await svc.AcknowledgeAsync(id, userId.Value, _cts.Token);
+        }
+        await RefreshAsync();
+        StateHasChanged();
+    }
+
+    private async Task<Guid?> CurrentUserIdAsync()
+    {
+        if (AuthState is null) return null;
+
+        var state = await AuthState;
+        var claim = state.User.FindFirst(c =>
+            c.Type.EndsWith("nameidentifier", StringComparison.OrdinalIgnoreCase));
+
+        if (claim is null) return null;
+
+        return Guid.TryParse(claim.Value, out var id) ? id : null;
+    }
+
+    // ⚠️ همه با if نوشته شده‌اند نه switch با الگوی رابطه‌ای — در .razor
+    // یک < داخل الگو باعث می‌شود parser آن را تگ ببیند.
+
+    private Color BadgeColor()
+    {
+        if (_counts.Critical > 0) return Color.Error;
+        if (_counts.Error > 0) return Color.Error;
+        if (_counts.Warning > 0) return Color.Warning;
+        return Color.Default;
+    }
+
+    private static Color SeverityColor(EventSeverity s)
+    {
+        if (s == EventSeverity.Critical) return Color.Error;
+        if (s == EventSeverity.Error) return Color.Error;
+        if (s == EventSeverity.Warning) return Color.Warning;
+        return Color.Info;
+    }
+
+    private static string SeverityIcon(EventSeverity s)
+    {
+        if (s == EventSeverity.Critical) return Icons.Material.Filled.Dangerous;
+        if (s == EventSeverity.Error) return Icons.Material.Filled.Error;
+        if (s == EventSeverity.Warning) return Icons.Material.Filled.Warning;
+        return Icons.Material.Filled.Info;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+
+        if (_hub is not null)
+        {
+            try { await _hub.DisposeAsync(); } catch { }
+        }
+
+        _cts.Dispose();
+        _gate.Dispose();
+    }
+}

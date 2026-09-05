@@ -1,0 +1,215 @@
+﻿@page "/alarms"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using NaraEyes.Application.Contracts.Interfaces.Alarms
+@using NaraEyes.Application.Contracts.Models.Alarms
+@using NaraEyes.Domain.Enumerations
+@inject IAlarmService AlarmService
+@inject ISnackbar Snackbar
+@attribute [Authorize]
+
+<PageTitle>آلارم‌ها</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+
+    <div class="d-flex align-center mb-4">
+        <MudIcon Icon="@Icons.Material.Filled.NotificationsActive"
+                 Color="Color.Primary" Size="Size.Large" Class="me-2" />
+        <div>
+            <MudText Typo="Typo.h5">آلارم‌ها</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                رویدادهای ثبت‌شده‌ی دستگاه‌ها
+            </MudText>
+        </div>
+    </div>
+
+    <MudPaper Class="pa-3 mb-4" Elevation="1">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="bool?" @bind-Value="_filter.Acknowledged"
+                           Label="وضعیت تأیید" Dense="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="bool?" Value="@((bool?)false)">تأییدنشده</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="@((bool?)true)">تأییدشده</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="@((bool?)null)">همه</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="EventSeverity ?" @bind-Value="_filter.Severity"
+                           Label="شدت" Dense="true" Clearable="true"
+                           Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem T="EventSeverity ?" Value="@((EventSeverity?)null)">همه</MudSelectItem>
+                    <MudSelectItem T="EventSeverity ?" Value="@((EventSeverity?)EventSeverity.Critical)">بحرانی</MudSelectItem>
+                    <MudSelectItem T="EventSeverity ?" Value="@((EventSeverity?)EventSeverity.Error)">خطا</MudSelectItem>
+                    <MudSelectItem T="EventSeverity ?" Value="@((EventSeverity?)EventSeverity.Warning)">هشدار</MudSelectItem>
+                    <MudSelectItem T="EventSeverity ?" Value="@((EventSeverity?)EventSeverity.Info)">اطلاعی</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudTextField T="string" @bind-Value="_filter.Search"
+                              Label="جستجو" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           Disabled="_loading" OnClick="LoadAsync" Class="me-2">
+                    اعمال
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.DoneAll"
+                           Disabled="@(_selected.Count == 0)"
+                           OnClick="AckSelectedAsync">
+                    تأیید (@_selected.Count)
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudTable T="AlarmRow" Items="_rows" Dense="true" Hover="true" Striped="true"
+              Loading="_loading" RowsPerPage="25" Elevation="1"
+              MultiSelection="true" @bind-SelectedItems="_selected"
+              Breakpoint="Breakpoint.Sm">
+        <HeaderContent>
+            <MudTh>شدت</MudTh>
+            <MudTh>نوع</MudTh>
+            <MudTh>پیام</MudTh>
+            <MudTh>دستگاه</MudTh>
+            <MudTh>شعبه</MudTh>
+            <MudTh>زمان</MudTh>
+            <MudTh>تأیید</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="شدت">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="@SeverityColor(context.Severity)">
+                    @context.SeverityFa
+                </MudChip>
+            </MudTd>
+            <MudTd DataLabel="نوع">@context.CodeFa</MudTd>
+            <MudTd DataLabel="پیام">@context.Message</MudTd>
+            <MudTd DataLabel="دستگاه">@context.DeviceIp</MudTd>
+            <MudTd DataLabel="شعبه">@(context.BranchName ?? "—")</MudTd>
+            <MudTd DataLabel="زمان">@context.EventTime.ToString("yyyy/MM/dd HH:mm")</MudTd>
+            <MudTd DataLabel="تأیید">
+                @if (context.Acknowledged)
+                {
+                    <MudTooltip Text="@AckTooltip(context)">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                                 Color="Color.Success" Size="Size.Small" />
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Check"
+                                   Size="Size.Small" Title="تأیید"
+                                   OnClick="@(() => AckAsync(context.Id))" />
+                }
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            <MudText Class="pa-4">آلارمی یافت نشد</MudText>
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager RowsPerPageString="تعداد در صفحه" InfoFormat="@_pagerInfoFormat" />
+        </PagerContent>
+    </MudTable>
+
+</MudContainer>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private readonly AlarmFilter _filter = new() { Acknowledged = false, Take = 500 };
+    private List<AlarmRow> _rows = new();
+    private HashSet<AlarmRow> _selected = new();
+
+    private bool _loading;
+    private readonly string _pagerInfoFormat = "{first_item}-{last_item} از {all_items}";
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _selected = new();
+        StateHasChanged();
+
+        try
+        {
+            _rows = await AlarmService.GetAsync(_filter, _cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت آلارم‌ها: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AckAsync(Guid id)
+    {
+        var userId = await CurrentUserIdAsync();
+        if (userId is null) return;
+
+        await AlarmService.AcknowledgeAsync(id, userId.Value, _cts.Token);
+        await LoadAsync();
+    }
+
+    private async Task AckSelectedAsync()
+    {
+        var userId = await CurrentUserIdAsync();
+        if (userId is null) return;
+
+        var n = await AlarmService.AcknowledgeManyAsync(
+            _selected.Select(x => x.Id), userId.Value, _cts.Token);
+
+        Snackbar.Add($"{n} آلارم تأیید شد.", Severity.Success);
+        await LoadAsync();
+    }
+
+    private async Task<Guid?> CurrentUserIdAsync()
+    {
+        if (AuthState is null) return null;
+
+        var state = await AuthState;
+        var claim = state.User.FindFirst(c =>
+            c.Type.EndsWith("nameidentifier", StringComparison.OrdinalIgnoreCase));
+
+        if (claim is null)
+        {
+            Snackbar.Add("شناسه‌ی کاربر یافت نشد.", Severity.Warning);
+            return null;
+        }
+
+        return Guid.TryParse(claim.Value, out var id) ? id : null;
+    }
+
+    private static string AckTooltip(AlarmRow r)
+    {
+        var who = string.IsNullOrWhiteSpace(r.AcknowledgedByName) ? "—" : r.AcknowledgedByName;
+        var when = r.AcknowledgedAt?.ToString("yyyy/MM/dd HH:mm") ?? "—";
+        return $"{who} — {when}";
+    }
+
+    private static Color SeverityColor(EventSeverity s)
+    {
+        if (s == EventSeverity.Critical) return Color.Error;
+        if (s == EventSeverity.Error) return Color.Error;
+        if (s == EventSeverity.Warning) return Color.Warning;
+        return Color.Info;
+    }
+}

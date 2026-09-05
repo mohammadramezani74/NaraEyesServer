@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using NaraEyes.Application.Contracts.Interfaces.Alarms;
 using NaraEyes.Application.Contracts.Interfaces.Base;
 using NaraEyes.Application.Contracts.Interfaces.Bulkoperations;
 using NaraEyes.Application.Contracts.Interfaces.Devices;
@@ -6,6 +7,7 @@ using NaraEyes.Application.Contracts.Interfaces.Identity;
 using NaraEyes.Application.Contracts.Interfaces.Metrics;
 using NaraEyes.Application.Contracts.Interfaces.Modules;
 using NaraEyes.Application.Contracts.Interfaces.Reports;
+using NaraEyes.Application.Services.Alarms;
 using NaraEyes.Application.Services.Base;
 using NaraEyes.Application.Services.Bulkoperations;
 using NaraEyes.Application.Services.Devices;
@@ -46,6 +48,7 @@ namespace NaraEyes.Application
             services.AddScoped<ICashInventoryReportService, CashInventoryReportService>();
             services.AddScoped<IDeviceAvailabilityReportService, DeviceAvailabilityReportService>();
             services.AddHostedService<ServerUptimeTracker>();
+            services.AddScoped<IAlarmService, AlarmService>();
             return services;
         }
     }
