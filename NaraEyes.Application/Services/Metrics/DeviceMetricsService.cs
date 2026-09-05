@@ -299,7 +299,8 @@ namespace NaraEyes.Application.Services.Metrics
             }
 
             atm.SetStatus(command.Mode, command.IsInservice);
-
+            // ثبت بازه‌ی وضعیت برای گزارش آماده‌به‌کاری
+            await TrackDeviceStateAsync(atm, command.Mode, DateTime.Now, ct: cancellationToken);
             mode = command.Mode;
 
             await _uow.SaveChangesAsync(cancellationToken);
@@ -408,6 +409,47 @@ namespace NaraEyes.Application.Services.Metrics
             }
         }
         private const int MaxSnapshots = 10;
+        /// <summary>
+        /// بازه‌ی وضعیت دستگاه را باز، به‌روز یا جابه‌جا می‌کند.
+        ///
+        /// فقط هنگام **تغییر دسته** بازه‌ی جدید باز می‌شود. اگر Mode عوض
+        /// شود ولی در همان دسته بماند (مثلاً InService → warning_Money)
+        /// بازه پیوسته می‌ماند و فقط CurrentMode به‌روز می‌شود — چون از
+        /// دید آماده‌به‌کاری هیچ اتفاقی نیفتاده.
+        ///
+        /// یعنی یک دستگاه سالم در طول یک ماه معمولاً **یک ردیف** دارد.
+        /// </summary>
+        private async Task TrackDeviceStateAsync(
+            Device atm, DeviceMode mode, DateTime now, CancellationToken ct)
+        {
+            var newState = AvailabilityMapping.FromMode(mode);
+
+            var open = await _uow.DeviceStateLogs
+                .FirstOrDefaultAsync(x => x.DeviceId == atm.Id && x.EndedAt == null, ct);
+
+            if (open is null)
+            {
+                _uow.DeviceStateLogs.Add(
+                    DeviceStateLog.Open(atm.Id, newState, mode, now));
+                return;
+            }
+
+            if (open.State == newState)
+            {
+                // همان دسته — فقط زنده بودن و Mode دقیق را ثبت کن
+                open.Touch(mode, now);
+                return;
+            }
+
+            // دسته عوض شد: بازه‌ی قبلی را ببند و بازه‌ی جدید باز کن.
+            //
+            // هر دو با **همان** لحظه‌ی now انجام می‌شوند تا بین دو بازه
+            // شکاف نیفتد؛ وگرنه مجموع مدت‌ها با طول واقعی بازه نمی‌خواند و
+            // درصدها کمی غلط درمی‌آیند.
+            open.Close(now);
+            _uow.DeviceStateLogs.Add(
+                DeviceStateLog.Open(atm.Id, newState, mode, now));
+        }
 
         private bool IsError(HealthStatus status)
         {

@@ -82,7 +82,7 @@ namespace NaraEyes.WebApplication.Common
                 Route:         "/reports/device-availability",
                 Category:      CatOperations,
                 Roles:         new[] { RoleCentral, RoleMonitoring, RoleProvince },
-                IsReady:       false),
+                IsReady:       true),
 
             // ================= نقدینگی =================
 

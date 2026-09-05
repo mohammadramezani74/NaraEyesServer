@@ -1,0 +1,468 @@
+﻿@page "/reports/device-availability"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using NaraEyes.Application.Contracts.Interfaces.Base
+@using NaraEyes.Application.Contracts.Interfaces.Reports
+@using NaraEyes.Application.Contracts.Models.Basic
+@using NaraEyes.Application.Contracts.Models.Reports
+@using NaraEyes.Domain.Enumerations
+@inject IDeviceAvailabilityReportService AvailabilityService
+@inject IBranchService BranchService
+@inject ISupervisionStateService SupervisionService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@attribute [Authorize(Roles = "مدیریت مرکزی,مدیریت مانیتورینگ,مدیریت استان")]
+
+<PageTitle>گزارش آماده‌به‌کاری دستگاه‌ها</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pa-4">
+
+    @* ---------- سرصفحه ---------- *@
+    <div class="d-flex align-center mb-4">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowForward"
+                       OnClick="@(() => Nav.NavigateTo("/reports-hub"))"
+                       Title="بازگشت به مرکز گزارش‌ها" />
+        <MudIcon Icon="@Icons.Material.Filled.Timeline" Color="Color.Primary"
+                 Size="Size.Large" Class="ms-2 me-2" />
+        <div>
+            <MudText Typo="Typo.h5">آماده‌به‌کاری دستگاه‌ها</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                مدت زمان در سرویس، خارج از سرویس، خطا و قطع ارتباط
+            </MudText>
+        </div>
+    </div>
+
+    @* ---------- فیلترها ---------- *@
+    <ReportFilterBar Filter="_filter"
+                     Branches="_branches"
+                     Supervisions="_supervisions"
+                     OnApply="LoadAsync"
+                     IsLoading="_loading">
+        <ExtraFilters>
+            <MudItem xs="12" sm="6" md="2">
+                <MudNumericField T="int" @bind-Value="_filter.MinOutageMinutes"
+                                 Label="حداقل مدت خروج (دقیقه)"
+                                 Min="0" Max="1440"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2">
+                <MudSelect T="AvailabilityState ?" @bind-Value="_filter.State"
+                           Label="وضعیت" Dense="true" Clearable="true"
+                           Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="AvailabilityState ?" Value="@((AvailabilityState?)null)">همه</MudSelectItem>
+                    <MudSelectItem T="AvailabilityState ?" Value="@((AvailabilityState?)AvailabilityState.OutOfService)">خارج از سرویس</MudSelectItem>
+                    <MudSelectItem T="AvailabilityState ?" Value="@((AvailabilityState?)AvailabilityState.Error)">خطا</MudSelectItem>
+                    <MudSelectItem T="AvailabilityState ?" Value="@((AvailabilityState?)AvailabilityState.Disconnected)">قطع ارتباط</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="2" Class="d-flex align-center">
+                <MudSwitch T="bool" @bind-Value="_filter.OnlyProblematic"
+                           Color="Color.Warning" Label="فقط مشکل‌دارها" />
+            </MudItem>
+        </ExtraFilters>
+    </ReportFilterBar>
+
+    @* ---------- شاخص‌های کلیدی ---------- *@
+    @if (_result is not null)
+    {
+        <MudGrid Class="mt-2 mb-4">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">آماده‌به‌کاری ناوگان</MudText>
+                    <MudText Typo="Typo.h4" Color="@FleetColor()">
+                        @_result.FleetAvailabilityPercent.ToString("0.00")٪
+                    </MudText>
+                    <MudProgressLinear Color="@FleetColor()" Rounded="true" Size="Size.Small"
+                                       Value="@_result.FleetAvailabilityPercent" Class="mt-2" />
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">هم‌اکنون خارج از سرویس</MudText>
+                    <MudText Typo="Typo.h4">@_result.CurrentlyDown</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                        از @_result.DeviceCount دستگاه
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">کل دفعات خروج</MudText>
+                    <MudText Typo="Typo.h4">@_result.TotalOutages</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                        بیش از @_filter.MinOutageMinutes دقیقه
+                    </MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 kpi-card" Elevation="1">
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">بدون داده</MudText>
+                    <MudText Typo="Typo.h4" Color="@(_result.DevicesWithoutData > 0 ? Color.Warning : Color.Default)">
+                        @_result.DevicesWithoutData
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">دستگاه</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @if (_result.ExcludedServerOutageSeconds > 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                @FormatDuration(_result.ExcludedServerOutageSeconds)
+                از این بازه، سرور در حال اجرا نبوده و از محاسبه کنار گذاشته شد.
+            </MudAlert>
+        }
+
+        @if (_result.DevicesWithoutData > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                @_result.DevicesWithoutData دستگاه در این بازه هیچ داده‌ای نفرستاده‌اند.
+                این‌ها در محاسبه‌ی درصد ناوگان شرکت ندارند — ممکن است تازه نصب شده باشند
+                یا ایجنتشان اجرا نشود.
+            </MudAlert>
+        }
+    }
+
+    @* ---------- نوار ابزار ---------- *@
+    <div class="d-flex align-center mb-2">
+        <MudTextField T="string" @bind-Value="_search" Immediate="true"
+                      Placeholder="جستجو در نتایج…" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Class="me-2" Style="max-width:320px" />
+        <MudSpacer />
+        <MudButton Variant="Variant.Filled" Color="Color.Success"
+                   StartIcon="@Icons.Material.Filled.TableView"
+                   Disabled="@(_exporting || _result is null)"
+                   OnClick="ExportAsync">
+            @(_exporting ? "در حال ساخت…" : "خروجی اکسل")
+        </MudButton>
+    </div>
+
+    @* ---------- جدول ---------- *@
+    <MudTable T="DeviceAvailabilityRow"
+              Items="@FilteredRows()"
+              Dense="true" Hover="true" Striped="true"
+              Loading="_loading"
+              Breakpoint="Breakpoint.Sm"
+              RowsPerPage="25"
+              Elevation="1"
+              OnRowClick="@OnRowClick">
+        <HeaderContent>
+            <MudTh>کد</MudTh>
+            <MudTh>آی‌پی</MudTh>
+            <MudTh>شعبه</MudTh>
+            <MudTh>سرپرستی</MudTh>
+            <MudTh>سازنده</MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="@(new Func<DeviceAvailabilityRow, object>(x => x.AvailabilityPercent))">
+                    آماده‌به‌کاری
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>مدت آماده</MudTh>
+            <MudTh>خارج از سرویس</MudTh>
+            <MudTh>خطا</MudTh>
+            <MudTh>قطع ارتباط</MudTh>
+            <MudTh>
+                <MudTableSortLabel SortBy="@(new Func<DeviceAvailabilityRow, object>(x => x.OutageCount))">
+                    دفعات
+                </MudTableSortLabel>
+            </MudTh>
+            <MudTh>وضعیت فعلی</MudTh>
+        </HeaderContent>
+
+        <RowTemplate>
+            <MudTd DataLabel="کد">@(context.DeviceCode?.ToString() ?? "—")</MudTd>
+            <MudTd DataLabel="آی‌پی">@context.DeviceIp</MudTd>
+            <MudTd DataLabel="شعبه">@(context.BranchName ?? "—")</MudTd>
+            <MudTd DataLabel="سرپرستی">@(context.SupervisionName ?? "—")</MudTd>
+            <MudTd DataLabel="سازنده">@context.VendorFa</MudTd>
+
+            <MudTd DataLabel="آماده‌به‌کاری">
+                @if (context.HasData)
+                {
+                    <div class="d-flex align-center">
+                        <MudText Typo="Typo.body2" Class="me-2">
+                            @context.AvailabilityPercent.ToString("0.00")٪
+                        </MudText>
+                        <MudProgressLinear Color="@PercentColor(context.AvailabilityPercent)"
+                                           Value="@context.AvailabilityPercent"
+                                           Rounded="true" Size="Size.Small"
+                                           Class="availability-bar" />
+                    </div>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Tertiary">—</MudText>
+                }
+            </MudTd>
+
+            <MudTd DataLabel="مدت آماده">@FormatDuration(context.AvailableSeconds)</MudTd>
+            <MudTd DataLabel="خارج از سرویس">@FormatDuration(context.OutOfServiceSeconds)</MudTd>
+            <MudTd DataLabel="خطا">@FormatDuration(context.ErrorSeconds)</MudTd>
+            <MudTd DataLabel="قطع ارتباط">@FormatDuration(context.DisconnectedSeconds)</MudTd>
+            <MudTd DataLabel="دفعات">@context.OutageCount</MudTd>
+
+            <MudTd DataLabel="وضعیت فعلی">
+                @if (context.HasData)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                             Color="@StateColor(context.CurrentState)">
+                        @AvailabilityMapping.Fa(context.CurrentState)
+                    </MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Warning">
+                        بدون داده
+                    </MudChip>
+                }
+            </MudTd>
+        </RowTemplate>
+
+        <NoRecordsContent>
+            <MudText Class="pa-4">موردی یافت نشد</MudText>
+        </NoRecordsContent>
+
+        <PagerContent>
+            <MudTablePager RowsPerPageString="تعداد در صفحه"
+                           InfoFormat="@_pagerInfoFormat" />
+        </PagerContent>
+    </MudTable>
+
+</MudContainer>
+
+@* ---------- دیالوگ جزئیات ---------- *@
+<MudDialog @bind-Visible="_detailsOpen" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@_detailsTitle</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_detailsLoading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (_details.Count == 0)
+        {
+            <MudText>بازه‌ای در این محدوده ثبت نشده است.</MudText>
+        }
+        else
+        {
+            <MudTable T="DeviceStateDetailRow" Items="_details" Dense="true" Hover="true"
+                      RowsPerPage="15" Elevation="0">
+                <HeaderContent>
+                    <MudTh>وضعیت</MudTh>
+                    <MudTh>حالت دستگاه</MudTh>
+                    <MudTh>شروع</MudTh>
+                    <MudTh>پایان</MudTh>
+                    <MudTh>مدت</MudTh>
+                    <MudTh>تغییرات</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="وضعیت">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@StateColor(context.State)">
+                            @context.StateFa
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="حالت دستگاه">@context.ModeFa</MudTd>
+                    <MudTd DataLabel="شروع">@context.StartedAt.ToString("yyyy/MM/dd HH:mm")</MudTd>
+                    <MudTd DataLabel="پایان">
+                        @(context.EndedAt.HasValue
+                                            ? context.EndedAt.Value.ToString("yyyy/MM/dd HH:mm")
+                                            : "ادامه دارد")
+                    </MudTd>
+                    <MudTd DataLabel="مدت">@FormatDuration(context.DurationSeconds)</MudTd>
+                    <MudTd DataLabel="تغییرات">@context.TransitionCount</MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager RowsPerPageString="تعداد در صفحه" InfoFormat="@_pagerInfoFormat" />
+                </PagerContent>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _detailsOpen = false)">بستن</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private readonly DeviceAvailabilityFilter _filter = new();
+    private DeviceAvailabilityResult? _result;
+
+    private List<BranchesViewModel> _branches = new();
+    private List<SupervisionStateViewModel> _supervisions = new();
+
+    private bool _loading;
+    private bool _exporting;
+    private string _search = "";
+
+    // آکولاد در attribute مستقیم razor را گیج می‌کند — از فیلد استفاده می‌شود
+    private readonly string _pagerInfoFormat = "{first_item}-{last_item} از {all_items}";
+
+    // ---- دیالوگ جزئیات ----
+    private bool _detailsOpen;
+    private bool _detailsLoading;
+    private string _detailsTitle = "";
+    private List<DeviceStateDetailRow> _details = new();
+
+    private readonly DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Large,
+        FullWidth = true,
+        CloseButton = true,
+    };
+
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _branches = await BranchService.GetAllBranches(_cts.Token);
+            _supervisions = await SupervisionService.GetSupervisionStates(_cts.Token);
+        }
+        catch
+        {
+            // نبود لیست فیلترها نباید مانع باز شدن صفحه شود
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _result = await AvailabilityService.GetSummaryAsync(_filter, _cts.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت گزارش: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private IEnumerable<DeviceAvailabilityRow> FilteredRows()
+    {
+        if (_result is null) return Array.Empty<DeviceAvailabilityRow>();
+        if (string.IsNullOrWhiteSpace(_search)) return _result.Rows;
+
+        var s = _search.Trim();
+        return _result.Rows.Where(r =>
+            r.DeviceIp.Contains(s, StringComparison.OrdinalIgnoreCase)
+            || (r.DeviceName is not null && r.DeviceName.Contains(s, StringComparison.OrdinalIgnoreCase))
+            || (r.BranchName is not null && r.BranchName.Contains(s, StringComparison.OrdinalIgnoreCase))
+            || (r.DeviceCode is not null && r.DeviceCode.ToString()!.Contains(s)));
+    }
+
+    private async Task OnRowClick(TableRowClickEventArgs<DeviceAvailabilityRow> args)
+    {
+        var row = args.Item;
+        if (row is null || !row.HasData) return;
+
+        _detailsTitle = $"جزئیات وضعیت — {row.DeviceIp}"
+                      + (string.IsNullOrWhiteSpace(row.BranchName) ? "" : $" ({row.BranchName})");
+        _details = new();
+        _detailsLoading = true;
+        _detailsOpen = true;
+        StateHasChanged();
+
+        try
+        {
+            _details = await AvailabilityService.GetDetailsAsync(row.DeviceId, _filter, _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در دریافت جزئیات: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _detailsLoading = false;
+            StateHasChanged();
+        }
+    }
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var bytes = await AvailabilityService.ExportExcelAsync(_filter, _cts.Token);
+
+            const string mime =
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            var fileName = $"availability_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+
+            // ترتیب پارامترها در این پروژه: (mime, base64, fileName)
+            await JS.InvokeVoidAsync("downloadBase64File",
+                mime, Convert.ToBase64String(bytes), fileName);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("خطا در ساخت اکسل: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    //  کمکی
+    //
+    //  ⚠️ عمداً همه با if نوشته شده‌اند، نه switch با الگوی رابطه‌ای.
+    //  در فایل .razor نوشتن «p < 90 =>» باعث می‌شود HTML parser آن < را
+    //  تگ ببیند و ده‌ها خطای کاملاً بی‌ربط تولید کند.
+    // ---------------------------------------------------------------
+
+    private Color FleetColor()
+    {
+        if (_result is null) return Color.Default;
+        return PercentColor(_result.FleetAvailabilityPercent);
+    }
+
+    private static Color PercentColor(double p)
+    {
+        if (p < 90) return Color.Error;
+        if (p < 98) return Color.Warning;
+        return Color.Success;
+    }
+
+    private static Color StateColor(AvailabilityState s)
+    {
+        if (s == AvailabilityState.Available) return Color.Success;
+        if (s == AvailabilityState.Error) return Color.Error;
+        if (s == AvailabilityState.Disconnected) return Color.Warning;
+        if (s == AvailabilityState.OutOfService) return Color.Secondary;
+        return Color.Default;
+    }
+
+    private static string FormatDuration(long seconds)
+    {
+        if (seconds <= 0) return "—";
+
+        var ts = TimeSpan.FromSeconds(seconds);
+
+        if (ts.TotalDays >= 1)
+            return $"{(int)ts.TotalDays} روز و {ts.Hours} ساعت";
+
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours} ساعت و {ts.Minutes} دقیقه";
+
+        return $"{ts.Minutes} دقیقه";
+    }
+}

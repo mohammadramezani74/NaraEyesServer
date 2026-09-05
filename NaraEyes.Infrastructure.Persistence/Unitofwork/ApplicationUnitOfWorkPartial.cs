@@ -36,5 +36,7 @@ namespace NaraEyes.Infrastructure.Persistence.Unitofwork
         public DbSet<CampaignTarget> CampaignTargets => Context.Set<CampaignTarget>();
         public DbSet<ArchivedDevice> ArchivedDevice => Context.Set<ArchivedDevice>();
         public DbSet<ModuleFaultLog> ModuleFaultLogs => Context.Set<ModuleFaultLog>();
+        public DbSet<DeviceStateLog> DeviceStateLogs => Context.Set<DeviceStateLog>();
+        public DbSet<ServerUptimeLog> ServerUptimeLogs => Context.Set<ServerUptimeLog>();
     }
 }

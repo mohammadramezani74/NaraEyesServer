@@ -44,6 +44,8 @@ namespace NaraEyes.Application
             services.AddScoped<IModuleFaultReportService, ModuleFaultReportService>();
             services.AddHostedService<DataRetentionService>();
             services.AddScoped<ICashInventoryReportService, CashInventoryReportService>();
+            services.AddScoped<IDeviceAvailabilityReportService, DeviceAvailabilityReportService>();
+            services.AddHostedService<ServerUptimeTracker>();
             return services;
         }
     }

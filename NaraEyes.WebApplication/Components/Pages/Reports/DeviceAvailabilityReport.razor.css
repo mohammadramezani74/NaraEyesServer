@@ -1,0 +1,11 @@
+﻿/* CSS باید در فایل جدا باشد.
+   داخل .razor، آکولادهای CSS به‌عنوان بلوک کد C# تفسیر می‌شوند. */
+
+.kpi-card {
+    height: 100%;
+}
+
+.availability-bar {
+    min-width: 70px;
+    flex: 1;
+}
